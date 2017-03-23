@@ -16,6 +16,8 @@ setup(
     keywords='tool file',
     include_package_data = True,
 
+    scripts = ['tcat'],
+
     classifiers=[
         'Environment :: Console',
         'Intended Audience :: Developers',

@@ -2,15 +2,12 @@
 
 import sys
 import py.path
-import colorama
 from colorama import Fore, Back, Style
 
 from ._version import __version__, version
 
 
-colorama.init()
-
-def fil(path):
+def filter(path):
     if path.basename[0] == '.':
         return False
     return True
@@ -52,40 +49,63 @@ def tree(path, args, base=None, prefix_str=None, child_prefix_str=None):
         print(' -> ' + color(p2) + rel + Style.RESET_ALL)
 
     elif p.isfile():
+        if not args.summary:
+            file(p, args, child_prefix_str)
+        else:
+            print()
+
+    elif p.isdir():
+        children = None
+        try:
+            children = p.listdir(sort=True, fil=filter)
+        except Exception as e:
+            print(' : ' + Back.RED + Style.BRIGHT + str(e.args) + Style.RESET_ALL)
+
+        if children:
+            print(flush=True)
+            n = len(children)
+            for i, child in enumerate(children):
+                if i == n - 1:
+                    h = '└── '
+                    c = '    '
+                else:
+                    h = '├── '
+                    c = '│   '
+
+                tree(child, args,
+                    base=p,
+                    prefix_str=child_prefix_str + h,
+                    child_prefix_str=child_prefix_str + c)
+
+    else:
+        print(flush=True)
+
+def file(p, args, child_prefix_str):
+    lines = None
+    try:
         f = open(str(p), encoding='utf8', errors='surrogateescape')
         lines = f.readlines()
+    except Exception as e:
+        print(' : ' + Back.RED + Style.BRIGHT + str(e.args[1]) + Style.RESET_ALL)
+    if lines is not None:
         if len(lines) > 1:
             print(flush=True)
             pre = child_prefix_str
-        else:
+        elif lines:
             print(end='', flush=True)
             pre = ' => '
             lines[0] = lines[0]\
-                    .replace('\r', '')\
-                    .replace('\n', '') + '\n'
-        for line in lines:
+                    .replace('\r', '␍')\
+                    .replace('\n', '␊') + '\n'
+        for line in lines[:args.max_lines]:
             print_str = pre + Style.DIM + Fore.WHITE + '█ ' + line + Style.RESET_ALL
             sys.stdout.buffer.write(print_str.encode('utf8', errors='ignore'))
+        if args.max_lines:
+            skipped = max(0, len(lines) - args.max_lines)
+            if skipped:
+                print(child_prefix_str + Fore.WHITE + '... {:d} lines truncated'.format(skipped) + Style.RESET_ALL)
         sys.stdout.buffer.flush()
-        print(end='', flush=True)
-
-
-    elif p.isdir():
-        print(flush=True)
-        children = p.listdir(sort=True, fil=fil)
-        n = len(children)
-        for i, child in enumerate(children):
-            if i == n - 1:
-                h = '└── '
-                c = '    '
-            else:
-                h = '├── '
-                c = '│   '
-
-            tree(child, args,
-                base=p,
-                prefix_str=child_prefix_str + h,
-                child_prefix_str=child_prefix_str + c)
-
-def file(p):
-    pass
+        if not lines:
+            print(' => ' + Style.DIM + Fore.BLACK + Back.WHITE + '␄' + Style.RESET_ALL, flush=True)
+        else:
+            print(end='', flush=True)
