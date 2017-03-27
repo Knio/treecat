@@ -18,6 +18,8 @@ setup(
 
     scripts = ['tcat'],
 
+    install_requires = ['colorama', 'py'],
+
     classifiers=[
         'Environment :: Console',
         'Intended Audience :: Developers',
