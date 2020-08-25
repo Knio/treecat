@@ -43,10 +43,13 @@ def tree(path, args, base=None, prefix_str=None, child_prefix_str=None):
     print(prefix_str + color(p) + current_str + Style.RESET_ALL, end='')
 
     if base and p.islink():
-        p2 = p.realpath()
-        rel = base.bestrelpath(p2)
+        try:
+            p2 = p.realpath()
+            rel = base.bestrelpath(p2)
+            print(' -> ' + color(p2) + rel + Style.RESET_ALL)
+        except Exception as e:
+            print(' -> ' + Style.BRIGHT + Back.RED + str(e.args[1]) + Style.RESET_ALL)
 
-        print(' -> ' + color(p2) + rel + Style.RESET_ALL)
 
     elif p.isfile():
         if not args.summary:
@@ -59,7 +62,7 @@ def tree(path, args, base=None, prefix_str=None, child_prefix_str=None):
         try:
             children = p.listdir(sort=True, fil=filter)
         except Exception as e:
-            print(' : ' + Back.RED + Style.BRIGHT + str(e.args) + Style.RESET_ALL)
+            print(' : ' + Back.RED + Style.BRIGHT + e.__doc__ + Style.RESET_ALL)
 
         if children:
             print(flush=True)
@@ -76,6 +79,8 @@ def tree(path, args, base=None, prefix_str=None, child_prefix_str=None):
                     base=p,
                     prefix_str=child_prefix_str + h,
                     child_prefix_str=child_prefix_str + c)
+        else:
+            print()
 
     else:
         print(flush=True)
