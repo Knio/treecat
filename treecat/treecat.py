@@ -62,7 +62,7 @@ def tree(path, args, base=None, prefix_str=None, child_prefix_str=None):
         try:
             children = p.listdir(sort=True, fil=filter)
         except Exception as e:
-            print(' : ' + Back.RED + Style.BRIGHT + e.__doc__ + Style.RESET_ALL)
+            print(' : ' + Back.RED + Style.BRIGHT + e.__doc__ + Style.RESET_ALL, end='')
 
         if children:
             print(flush=True)
@@ -102,8 +102,8 @@ def file(p, args, child_prefix_str):
             lines[0] = lines[0]\
                     .replace('\r', '␍')\
                     .replace('\n', '␊') + '\n'
-        for line in lines[:args.max_lines]:
-            print_str = pre + Style.DIM + Fore.WHITE + '█ ' + line + Style.RESET_ALL
+        for i, line in enumerate(lines[:args.max_lines]):
+            print_str = pre + Fore.YELLOW + '{:2d}│ '.format(i + 1) + Fore.WHITE + line + Style.RESET_ALL
             sys.stdout.buffer.write(print_str.encode('utf8', errors='ignore'))
         if args.max_lines:
             skipped = max(0, len(lines) - args.max_lines)

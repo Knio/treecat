@@ -1,6 +1,7 @@
 # coding=utf8
 
 import argparse
+import sys
 
 from .treecat import tree
 
@@ -12,12 +13,19 @@ def main():
 
     args = parser.parse_args()
 
-    if not args.path:
-        tree('.', args)
+    try:
+        if not args.path:
+            tree('.', args)
 
-    for path in args.path:
-        tree(path, args)
+        for path in args.path:
+            tree(path, args)
+    except IOError as e:
+        if e.errno == 32: # Broken pipe
+            sys.stderr.close()
+            return
+        raise
 
 
 if __name__ == '__main__':
     main()
+
