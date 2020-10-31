@@ -1,7 +1,10 @@
 # coding=utf8
 
+import mimetypes
 import os
 import sys
+
+# TODO use pathlib
 import py.path
 try:
     import signal
@@ -10,11 +13,13 @@ try:
         raise TimeoutError
     signal.signal(signal.SIGALRM, handler)
 
-
-except ImportError:
+except AttributeError:
+    # Alarm signal not supported on windows
     signal_alarm = lambda:None
 
-from colorama import Fore, Back, Style
+from colorama import Fore, Back, Style, init as colorama_init
+colorama_init()
+
 
 from ._version import __version__, version
 
@@ -27,7 +32,6 @@ def filter(path):
 
 def color(p):
     color = Fore.RED
-
     if p.islink():
         color = Style.BRIGHT + Fore.CYAN
     elif p.isfile():
@@ -36,8 +40,19 @@ def color(p):
         color = Fore.BLUE + Back.GREEN
     else:
         color = Style.BRIGHT + Fore.RED
-
     return color
+
+
+def printable(mtype):
+    bad = set([
+        'application/pdf',
+    ])
+    if mtype in bad:
+        return False
+    if mtype.startswith('image'): return False
+    if mtype.startswith('audio'): return False
+
+    return True
 
 
 def hsize(x):
@@ -48,6 +63,10 @@ def hsize(x):
         x /= 1024
         n += 1
     return '{:d} {}'.format(int(x), ['B', 'KiB', 'MiB', 'GiB', 'TiB'][n])
+
+
+def meta(s):
+    return Style.RESET_ALL + Style.BRIGHT + Fore.BLACK + s + Style.RESET_ALL
 
 
 def tree(path, args, base=None, prefix_str=None, child_prefix_str=None):
@@ -75,9 +94,12 @@ def tree(path, args, base=None, prefix_str=None, child_prefix_str=None):
 
 
     elif p.isfile():
+        mtype, encoding = mimetypes.guess_type(str(p))
+        if mtype is None:
+            mtype = 'unknown'
         sz = os.path.getsize(str(p))
-        print(Style.BRIGHT + Fore.BLACK + ' [{}]'.format(hsize(sz)) + Style.RESET_ALL, end='')
-        if not args.summary:
+        print(meta(' [{}, {}]'.format(mtype, hsize(sz))), end='')
+        if not args.summary and printable(mtype):
             file(p, args, child_prefix_str)
         else:
             print()
@@ -88,12 +110,12 @@ def tree(path, args, base=None, prefix_str=None, child_prefix_str=None):
             children = p.listdir(sort=True, fil=filter)
             n = len(children)
             if n == 0:
-                child_str = ' [empty]'
+                child_str = ' [empty dir]'
             elif n == 1: # TODO just print parent as "foo/bar" and don't recurse
                 child_str = ' [1 child]'
             else:
                 child_str = ' [{} children]'.format(len(children))
-            print(Style.BRIGHT + Fore.BLACK + child_str + Style.RESET_ALL, end='')
+            print(meta(child_str), end='')
 
         except Exception as e:
             print(' : ' + Back.RED + Style.BRIGHT + e.__doc__ + Style.RESET_ALL, end='')
@@ -120,9 +142,11 @@ def tree(path, args, base=None, prefix_str=None, child_prefix_str=None):
         print(flush=True)
 
 def file(p, args, child_prefix_str):
+
     lines = None
     try:
         f = open(str(p), encoding='utf8', errors='surrogateescape')
+        # 1s timeout on reads
         signal_alarm(1)
         lines = f.readlines()
         signal_alarm(0)
@@ -137,20 +161,32 @@ def file(p, args, child_prefix_str):
         return
     if len(lines) == 1:
         print(end='', flush=True)
-        line = ' => ' + lines[0]\
+        line = lines[0]
+        if args.max_line and len(child_prefix_str + line) > args.max_line:
+            l = len(line)
+            line = line[:args.max_line]
+            line = line + meta(' [{:d} chars]'.format(l))
+            # TODO leave \r\n at the end
+        line = line \
                 .replace('\r', ' ␍')\
                 .replace('\n', ' ␊') + ' ␃'
+        line = ' => ' + line
         print(line)
         return
     print(flush=True)
-    pre = child_prefix_str
     for i, line in enumerate(lines[:args.max_lines]):
-        print_str = pre + Fore.YELLOW + '{:2d}│ '.format(i + 1) + Fore.WHITE + line + Style.RESET_ALL
+        if args.max_line and len(child_prefix_str + line) > args.max_line:
+            l = len(line)
+            line = line[:args.max_line]
+            while line[-1] in '\r\n':
+                line = line[:-1]
+            line = line + meta(' [{:d} chars]'.format(l)) + '\r\n'
+        print_str = child_prefix_str + Fore.YELLOW + '{:2d}│ '.format(i + 1) + Fore.WHITE + line + Style.RESET_ALL
         sys.stdout.buffer.write(print_str.encode('utf8', errors='ignore'))
-    if args.max_lines:
-        skipped = max(0, len(lines) - args.max_lines)
-        if skipped:
-            print(child_prefix_str + Fore.WHITE + '... {:d} lines truncated'.format(skipped) + Style.RESET_ALL)
-    # print()
-    sys.stdout.buffer.flush()
 
+    skipped = max(0, len(lines) - args.max_lines) if args.max_lines else 0
+    if skipped:
+        print(child_prefix_str + meta('... [{:d} lines]'.format(len(lines))))
+    elif not '\n' in line[-2:]:
+        print()
+    sys.stdout.buffer.flush()
