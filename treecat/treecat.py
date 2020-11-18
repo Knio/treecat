@@ -18,8 +18,12 @@ except AttributeError:
     signal_alarm = lambda:None
 
 from colorama import Fore, Back, Style, init as colorama_init
-colorama_init()
 
+# TODO move to main
+# print(sys.stdout)
+# raise Foo
+# sys.stdout.reconfigure(encoding='utf-8')
+colorama_init(strip=False) # Allow colors when not a TTY ( | less)
 
 from ._version import __version__, version
 
