@@ -18,7 +18,7 @@ setup(
 
     scripts = ['tcat'],
 
-    install_requires = ['colorama', 'py'],
+    install_requires = ['colorama'],
 
     classifiers=[
         'Environment :: Console',

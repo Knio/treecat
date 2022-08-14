@@ -1,11 +1,13 @@
 # coding=utf8
 
+import functools
 import mimetypes
 import os
+import pathlib
+import string
 import sys
 
-# TODO use pathlib
-import py.path
+
 try:
     import signal
     signal_alarm = signal.alarm
@@ -15,7 +17,13 @@ try:
 
 except AttributeError:
     # Alarm signal not supported on windows
-    signal_alarm = lambda:None
+    signal_alarm = lambda x:None
+
+try:
+    functools.cache
+except AttributeError:
+    functools.cache = lambda x:x
+
 
 from colorama import Fore, Back, Style, init as colorama_init
 
@@ -36,11 +44,11 @@ def filter(path):
 
 def color(p):
     color = Fore.RED
-    if p.islink():
+    if p.is_symlink():
         color = Style.BRIGHT + Fore.CYAN
-    elif p.isfile():
+    elif p.is_file():
         color = Style.BRIGHT + Fore.GREEN
-    elif p.isdir():
+    elif p.is_dir():
         color = Fore.BLUE + Back.GREEN
     else:
         color = Style.BRIGHT + Fore.RED
@@ -74,7 +82,7 @@ def meta(s):
 
 
 def tree(path, args, base=None, prefix_str=None, child_prefix_str=None):
-    p = py.path.local(path)
+    p = pathlib.Path(path)
 
     if prefix_str is None:
         prefix_str = ''
@@ -82,22 +90,21 @@ def tree(path, args, base=None, prefix_str=None, child_prefix_str=None):
         child_prefix_str = ''
 
     if base:
-        current_str = base.bestrelpath(p)
+        current = p.relative_to(base)
     else:
-        current_str = str(p)
+        current = p
+    print(prefix_str + color(p) + str(current) + Style.RESET_ALL, end='')
 
-    print(prefix_str + color(p) + current_str + Style.RESET_ALL, end='')
-
-    if base and p.islink():
+    if base and p.is_symlink():
         try:
-            p2 = p.realpath()
-            rel = base.bestrelpath(p2)
-            print(' -> ' + color(p2) + rel + Style.RESET_ALL)
-        except Exception as e:
+            p2 = p.resolve(strict=True)
+            rel = p2.relative_to(base.resolve(strict=True))
+            print(' -> ' + color(p2) + str(rel) + Style.RESET_ALL)
+        except IOError as e:
             print(' -> ' + Style.BRIGHT + Back.RED + str(e.args[1]) + Style.RESET_ALL)
 
 
-    elif p.isfile():
+    elif p.is_file():
         mtype, encoding = mimetypes.guess_type(str(p))
         if mtype is None:
             mtype = 'unknown'
@@ -108,10 +115,10 @@ def tree(path, args, base=None, prefix_str=None, child_prefix_str=None):
         else:
             print()
 
-    elif p.isdir():
+    elif p.is_dir():
         children = None
         try:
-            children = p.listdir(sort=True, fil=filter)
+            children = sorted(p.iterdir())
             n = len(children)
             if n == 0:
                 child_str = ' [empty dir]'
@@ -121,7 +128,7 @@ def tree(path, args, base=None, prefix_str=None, child_prefix_str=None):
                 child_str = ' [{} children]'.format(len(children))
             print(meta(child_str), end='')
 
-        except Exception as e:
+        except IOError as e:
             print(' : ' + Back.RED + Style.BRIGHT + e.__doc__ + Style.RESET_ALL, end='')
 
         if children:
@@ -145,27 +152,104 @@ def tree(path, args, base=None, prefix_str=None, child_prefix_str=None):
     else:
         print(flush=True)
 
+
+BIN_AL = set(string.ascii_letters + string.digits)
+@functools.cache
+def bin_style(x):
+    c = chr(x)
+    if c in BIN_AL:
+        return Fore.CYAN, c
+    if x == 0:
+        return Style.DIM, '\u2400'
+    if x == 255:
+        return Fore.GREEN, c
+    if not c.isprintable():
+        return Style.BRIGHT + Fore.YELLOW, '\uFFFD'
+    return '', c
+
+
+def bin_str(data):
+    s = []
+    cur_style = None
+    for x in data:
+        style, c = bin_style(x)
+        if style != cur_style:
+            s.append(Style.RESET_ALL)
+            s.append(style)
+            cur_style = style
+        s.append(c)
+    return ''.join(s)
+
+
+def bin_hex(data, width):
+    s = []
+    cur_style = None
+    for x in data:
+        style, c = bin_style(x)
+        t = ''
+        if style != cur_style:
+            t = Style.RESET_ALL + style
+            cur_style = style
+        s.append(f'{t}{x:02x}')
+    s.extend(['  '] * (width - len(s)))
+    return ' '.join(s)
+
+
+def xxd(data, width=None):
+    if width is None:
+        width = 32
+    for i in range(0, len(data), width):
+        span = data[i:i + width]
+        line = ' {} {}│{} {}\n'.format(
+            bin_hex(span, width),
+            Style.RESET_ALL + Fore.YELLOW,
+            Style.RESET_ALL,
+            bin_str(span),
+        )
+        yield i, line
+
+
 def file(p, args, child_prefix_str):
 
     lines = None
+    is_bin = False
     try:
         f = open(str(p), encoding='utf8', errors='surrogateescape')
-        # 1s timeout on reads
         signal_alarm(1)
-        lines = f.readlines()
+        # 1s timeout on reads
+        data = open(p, 'rb').read()
         signal_alarm(0)
+        try:
+            text = data.decode('utf8')
+            lines = text.splitlines(True)
+        except:
+            lines = list(xxd(data, args.max_line))
+            is_bin = True
     except TimeoutError as e:
         print(' : ' + Back.RED + Style.BRIGHT + 'ReadTimeout' + Style.RESET_ALL)
         return
-    except Exception as e:
+    except IOException as e:
         print(' : ' + Back.RED + Style.BRIGHT + str(e.args[1]) + Style.RESET_ALL)
         return
+    # except Exception as e:
+    #     print(' : ' + Back.RED + Style.BRIGHT + str(e) + Style.RESET_ALL)
+    #     return
     if len(lines) == 0:
         print(' => ' + Style.DIM + Fore.BLACK + Back.WHITE + '␄' + Style.RESET_ALL, flush=True)
         return
     if len(lines) == 1:
         print(end='', flush=True)
         line = lines[0]
+        if is_bin:
+            i, line = line
+            print_str = ''.join((
+                ' => ',
+                bin_hex(data, 0), Style.RESET_ALL,
+                Fore.YELLOW, ' │ ', Style.RESET_ALL,
+                bin_str(data),
+            ))
+            print(print_str)
+            return
         if args.max_line and len(child_prefix_str + line) > args.max_line:
             l = len(line)
             line = line[:args.max_line]
@@ -179,12 +263,19 @@ def file(p, args, child_prefix_str):
         return
     print(flush=True)
     for i, line in enumerate(lines[:args.max_lines]):
+        if is_bin:
+            i, line = line
+            print_str = child_prefix_str + Fore.YELLOW + '{}│ '.format(i.to_bytes(4, 'big').hex('.')) + Fore.WHITE + line + Style.RESET_ALL
+            sys.stdout.buffer.write(print_str.encode('utf8', errors='ignore'))
+            continue
+
         if args.max_line and len(child_prefix_str + line) > args.max_line:
             l = len(line)
             line = line[:args.max_line]
             while line[-1] in '\r\n':
                 line = line[:-1]
             line = line + meta(' [{:d} chars]'.format(l)) + '\r\n'
+
         print_str = child_prefix_str + Fore.YELLOW + '{:2d}│ '.format(i + 1) + Fore.WHITE + line + Style.RESET_ALL
         sys.stdout.buffer.write(print_str.encode('utf8', errors='ignore'))
 
@@ -193,4 +284,5 @@ def file(p, args, child_prefix_str):
         print(child_prefix_str + meta('... [{:d} lines]'.format(len(lines))))
     elif not '\n' in line[-2:]:
         print()
+    print(end='', flush=True)
     sys.stdout.buffer.flush()

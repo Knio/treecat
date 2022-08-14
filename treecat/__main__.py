@@ -14,7 +14,7 @@ def main():
 
     args = parser.parse_args()
 
-    # sys.stdout.reconfigure(encoding='utf-8')
+    # sys.stdout.reconfigure(encoding='utf8')
 
     try:
         if not args.path:
@@ -28,6 +28,11 @@ def main():
         return
     except IOError as e:
         if e.errno == 32: # Broken pipe
+            sys.stderr.close()
+            return
+        raise
+    except OSError as e:
+        if e.errno == 22: # Invalid argument
             sys.stderr.close()
             return
         raise
