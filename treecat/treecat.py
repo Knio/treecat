@@ -214,12 +214,12 @@ def file(p, args, child_prefix_str):
     lines = None
     is_bin = False
     try:
-        f = open(str(p), encoding='utf8', errors='surrogateescape')
         signal_alarm(1)
         # 1s timeout on reads
         data = open(p, 'rb').read()
         signal_alarm(0)
         try:
+            assert '\x00' not in data
             text = data.decode('utf8')
             lines = text.splitlines(True)
         except:
