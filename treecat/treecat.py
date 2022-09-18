@@ -1,5 +1,6 @@
 # coding=utf8
 
+import collections
 import functools
 import mimetypes
 import os
@@ -81,7 +82,31 @@ def meta(s):
     return Style.RESET_ALL + Style.BRIGHT + Fore.BLACK + s + Style.RESET_ALL
 
 
-def tree(path, args, base=None, prefix_str=None, child_prefix_str=None):
+
+Dirstat = collections.namedtuple('Dir', ['n_dirs', 'n_files', 's_files'])
+
+@functools.cache
+def dir_stat(p):
+    n_dirs = 0
+    n_files = 0
+    s_files = 0
+    for d, dirs, files in os.walk(p):
+        d = pathlib.Path(d)
+        n_dirs += len(dirs)
+        n_files += len(files)
+        for f in files:
+            s = (d / f).stat()
+            s_files += s.st_size
+        for c in dirs:
+            r2 = dir_stat(d / c)
+            n_dirs += r2.n_dirs
+            n_files += r2.n_files
+            s_files += r2.s_files
+        break # don't actually use os.walk's recursion
+    return Dirstat(n_dirs, n_files, s_files)
+
+
+def tree(path, args, base=None, prefix_str=None, child_prefix_str=None, depth=1):
     p = pathlib.Path(path)
 
     if prefix_str is None:
@@ -103,7 +128,6 @@ def tree(path, args, base=None, prefix_str=None, child_prefix_str=None):
         except IOError as e:
             print(' -> ' + Style.BRIGHT + Back.RED + str(e.args[1]) + Style.RESET_ALL)
 
-
     elif p.is_file():
         mtype, encoding = mimetypes.guess_type(str(p))
         if mtype is None:
@@ -123,15 +147,19 @@ def tree(path, args, base=None, prefix_str=None, child_prefix_str=None):
             if n == 0:
                 child_str = ' [empty dir]'
             elif n == 1: # TODO just print parent as "foo/bar" and don't recurse
-                child_str = ' [1 child]'
+                child_str = ' [  1   child,  '
             else:
-                child_str = ' [{} children]'.format(len(children))
-            print(meta(child_str), end='')
+                child_str = f' [{len(children):3d} children, '
+            ds = dir_stat(p)
+            if n:
+                child_str += f'{ds.n_dirs:6d} subdirs, {ds.n_files:6d} files, {hsize(ds.s_files)+" total size":>20s}]'
+            print(' ' * (24 - len(str(current))), end='')
+            print(meta(child_str), end='', flush=True)
 
         except IOError as e:
             print(' : ' + Back.RED + Style.BRIGHT + e.__doc__ + Style.RESET_ALL, end='')
 
-        if children:
+        if children and args.max_depth != -1 and depth <= args.max_depth:
             print(flush=True)
             n = len(children)
             for i, child in enumerate(children):
@@ -145,7 +173,8 @@ def tree(path, args, base=None, prefix_str=None, child_prefix_str=None):
                 tree(child, args,
                     base=p,
                     prefix_str=child_prefix_str + h,
-                    child_prefix_str=child_prefix_str + c)
+                    child_prefix_str=child_prefix_str + c,
+                    depth=depth + 1)
         else:
             print()
 
@@ -205,6 +234,7 @@ def xxd(data, width=None):
             Style.RESET_ALL + Fore.YELLOW,
             Style.RESET_ALL,
             bin_str(span),
+            Style.RESET_ALL,
         )
         yield i, line
 

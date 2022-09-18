@@ -11,6 +11,7 @@ def main():
     parser.add_argument('-s', '--summary', action='store_true')
     parser.add_argument('-L', '--max-lines', type=int)
     parser.add_argument('-W', '--max-line', type=int)
+    parser.add_argument('-D', '--max-depth', type=int, default=-1)
 
     args = parser.parse_args()
 
