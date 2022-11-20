@@ -118,6 +118,8 @@ def tree(path, args, base=None, prefix_str=None, child_prefix_str=None, depth=1)
         current = p.relative_to(base)
     else:
         current = p
+
+    # todo collapse a/b/c
     print(prefix_str + color(p) + str(current) + Style.RESET_ALL, end='')
 
     if base and p.is_symlink():
@@ -146,7 +148,8 @@ def tree(path, args, base=None, prefix_str=None, child_prefix_str=None, depth=1)
             n = len(children)
             if n == 0:
                 child_str = ' [empty dir]'
-            elif n == 1: # TODO just print parent as "foo/bar" and don't recurse
+            elif n == 1:
+                # TODO just print parent as "foo/bar" and don't recurse
                 child_str = ' [  1   child,  '
             else:
                 child_str = f' [{len(children):3d} children, '
@@ -159,7 +162,7 @@ def tree(path, args, base=None, prefix_str=None, child_prefix_str=None, depth=1)
         except IOError as e:
             print(' : ' + Back.RED + Style.BRIGHT + e.__doc__ + Style.RESET_ALL, end='')
 
-        if children and args.max_depth != -1 and depth <= args.max_depth:
+        if children and (args.max_depth == -1 or depth <= args.max_depth):
             print(flush=True)
             n = len(children)
             for i, child in enumerate(children):
