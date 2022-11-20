@@ -7,7 +7,10 @@ import os
 import pathlib
 import string
 import sys
+import unicodedata
+import logging
 
+log = logging.getLogger('treecat')
 
 try:
     import signal
@@ -125,7 +128,10 @@ def tree(path, args, base=None, prefix_str=None, child_prefix_str=None, depth=1)
     if base and p.is_symlink():
         try:
             p2 = p.resolve(strict=True)
-            rel = p2.relative_to(base.resolve(strict=True))
+            try:
+                rel = p2.relative_to(base.resolve(strict=True))
+            except ValueError:
+                rel = p2
             print(' -> ' + color(p2) + str(rel) + Style.RESET_ALL)
         except IOError as e:
             print(' -> ' + Style.BRIGHT + Back.RED + str(e.args[1]) + Style.RESET_ALL)
@@ -252,16 +258,21 @@ def file(p, args, child_prefix_str):
         data = open(p, 'rb').read()
         signal_alarm(0)
         try:
-            assert '\x00' not in data
             text = data.decode('utf8')
+            categories = collections.defaultdict(int)
+            for x in text:
+                for c in unicodedata.category(x):
+                    categories[c] += 1
+            log.debug(categories)
             lines = text.splitlines(True)
-        except:
+        except ValueError as e:
+            log.debug('Assuming binary data. %r', e)
             lines = list(xxd(data, args.max_line))
             is_bin = True
     except TimeoutError as e:
         print(' : ' + Back.RED + Style.BRIGHT + 'ReadTimeout' + Style.RESET_ALL)
         return
-    except IOException as e:
+    except IOError as e:
         print(' : ' + Back.RED + Style.BRIGHT + str(e.args[1]) + Style.RESET_ALL)
         return
     # except Exception as e:
