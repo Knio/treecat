@@ -78,7 +78,8 @@ def hsize(x):
     while x > 9999:
         x /= 1024
         n += 1
-    return '{:d} {}'.format(int(x), ['B', 'KiB', 'MiB', 'GiB', 'TiB'][n])
+    return '{:d} {}'.format(int(x),
+        ['B', 'KiB', 'MiB', 'GiB', 'TiB'][n])
 
 
 def meta(s):
