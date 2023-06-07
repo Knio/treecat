@@ -17,13 +17,13 @@ except AttributeError:
     # Alarm signal not supported on windows
     signal_alarm = lambda:None
 
-from colorama import Fore, Back, Style, init as colorama_init
+from colorama import Fore, Back, Style
 
 # TODO move to main
 # print(sys.stdout)
 # raise Foo
 # sys.stdout.reconfigure(encoding='utf-8')
-colorama_init(strip=False) # Allow colors when not a TTY ( | less)
+# colorama_init(strip=False) # Allow colors when not a TTY ( | less)
 
 from ._version import __version__, version
 
@@ -73,8 +73,12 @@ def meta(s):
     return Style.RESET_ALL + Style.BRIGHT + Fore.BLACK + s + Style.RESET_ALL
 
 
-def tree(path, args, base=None, prefix_str=None, child_prefix_str=None):
+def tree(path, args, base=None, prefix_str=None, child_prefix_str=None, depth=0):
     p = py.path.local(path)
+
+    if p.isfile() and args.no_files:
+        return
+
 
     if prefix_str is None:
         prefix_str = ''
@@ -114,11 +118,16 @@ def tree(path, args, base=None, prefix_str=None, child_prefix_str=None):
             children = p.listdir(sort=True, fil=filter)
             n = len(children)
             if n == 0:
-                child_str = ' [empty dir]'
+                child_str = ' [📂, empty]'
             elif n == 1: # TODO just print parent as "foo/bar" and don't recurse
-                child_str = ' [1 child]'
+                child_str = ' [📂, 1 child]'
             else:
-                child_str = ' [{} children]'.format(len(children))
+                child_str = ' [📂, {} children]'.format(len(children))
+
+            if n and args.depth and (depth > args.depth):
+                child_str += ' [📂, ' + Fore.RED + 'max depth' + Fore.BLACK + ']'
+                children = []
+
             print(meta(child_str), end='')
 
         except Exception as e:
@@ -138,7 +147,8 @@ def tree(path, args, base=None, prefix_str=None, child_prefix_str=None):
                 tree(child, args,
                     base=p,
                     prefix_str=child_prefix_str + h,
-                    child_prefix_str=child_prefix_str + c)
+                    child_prefix_str=child_prefix_str + c,
+                    depth=depth + 1)
         else:
             print()
 
@@ -149,7 +159,7 @@ def file(p, args, child_prefix_str):
 
     lines = None
     try:
-        f = open(str(p), encoding='utf8', errors='surrogateescape')
+        f = open(str(p), encoding='utf8', errors='ignore')
         # 1s timeout on reads
         signal_alarm(1)
         lines = f.readlines()
@@ -161,7 +171,7 @@ def file(p, args, child_prefix_str):
         print(' : ' + Back.RED + Style.BRIGHT + str(e.args[1]) + Style.RESET_ALL)
         return
     if len(lines) == 0:
-        print(' => ' + Style.DIM + Fore.BLACK + Back.WHITE + '␄' + Style.RESET_ALL, flush=True)
+        print(' => ' + '⬔' + Style.RESET_ALL, flush=True)
         return
     if len(lines) == 1:
         print(end='', flush=True)
@@ -172,8 +182,8 @@ def file(p, args, child_prefix_str):
             line = line + meta(' [{:d} chars]'.format(l))
             # TODO leave \r\n at the end
         line = line \
-                .replace('\r', ' ␍')\
-                .replace('\n', ' ␊') + ' ␃'
+                .replace('\r', ' 」')\
+                .replace('\n', ' 』') + '⬔'
         line = ' => ' + line
         print(line)
         return

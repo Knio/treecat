@@ -3,6 +3,8 @@
 import argparse
 import sys
 
+import colorama
+
 from .treecat import tree
 
 def main():
@@ -11,10 +13,17 @@ def main():
     parser.add_argument('-s', '--summary', action='store_true')
     parser.add_argument('-L', '--max-lines', type=int)
     parser.add_argument('-W', '--max-line', type=int)
+    parser.add_argument('-D', '--no-files', action='store_true')
+    parser.add_argument('-R', '--depth', type=int, default=0)
+    parser.add_argument('--no-color', action='store_true')
+
 
     args = parser.parse_args()
-
+    # print(args)
+    # raise Exception
     # sys.stdout.reconfigure(encoding='utf-8')
+
+    colorama.init(strip=args.no_color)
 
     try:
         if not args.path:
