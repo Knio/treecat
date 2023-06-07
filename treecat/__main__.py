@@ -1,17 +1,18 @@
 # coding=utf8
 '''
-Tool for displaying files and directories as a tree
+Tool for displaying files and directories as a tree.
 '''
 
 import argparse
 import sys
 
-from . import treecat
+import colorama
+
+from .treecat import tree
 
 __doc__ += f'''
 version {treecat.version}
 '''
-
 
 def main():
   parser = argparse.ArgumentParser(
@@ -22,10 +23,14 @@ def main():
   parser.add_argument('-s', '--summary', action='store_true')
   parser.add_argument('-L', '--max-lines', type=int)
   parser.add_argument('-W', '--max-line', type=int)
-  parser.add_argument('-D', '--max-depth', type=int, default=-1)
+  parser.add_argument('-D', '--no-files', action='store_true')
+  parser.add_argument('-R', '--depth', type=int, default=0)
+  parser.add_argument('--no-color', action='store_true')
+
 
   args = parser.parse_args()
 
+  colorama.init(strip=args.no_color)
   sys.stdout.reconfigure(encoding='utf8')
 
   try:
