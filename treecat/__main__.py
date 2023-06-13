@@ -8,7 +8,7 @@ import sys
 
 import colorama
 
-from .treecat import tree
+import treecat
 
 __doc__ += f'''
 version {treecat.version}
@@ -24,7 +24,7 @@ def main():
   parser.add_argument('-L', '--max-lines', type=int)
   parser.add_argument('-W', '--max-line', type=int)
   parser.add_argument('-D', '--no-files', action='store_true')
-  parser.add_argument('-R', '--depth', type=int, default=0)
+  parser.add_argument('-R', '--max-depth', type=int, default=-1)
   parser.add_argument('--no-color', action='store_true')
 
 
