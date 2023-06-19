@@ -2,13 +2,14 @@
 
 import collections
 import functools
+import logging
+import math
 import mimetypes
 import os
 import pathlib
 import string
 import sys
 import unicodedata
-import logging
 
 log = logging.getLogger('treecat')
 
@@ -34,9 +35,6 @@ from colorama import Fore, Back, Style
 from ._version import __version__, version
 
 
-WIDTH = os.get_terminal_size(0)[0]
-
-
 def filter(path):
     if path.basename[0] == '.':
         return False
@@ -57,12 +55,13 @@ def color(p):
 
 
 def printable(mtype):
+    # TODO make this take args
     bad = set([
-        'application/pdf',
+        # 'application/pdf',
     ])
     if mtype in bad:
         return False
-    if mtype.startswith('image'): return False
+    # if mtype.startswith('image'): return False
     if mtype.startswith('audio'): return False
 
     return True
@@ -108,6 +107,11 @@ def dir_stat(p):
 
 
 def tree(path, args, base=None, prefix_str=None, child_prefix_str=None, depth=0):
+    if prefix_str is None:
+        prefix_str = ''
+    if child_prefix_str is None:
+        child_prefix_str = ''
+
     p = pathlib.Path(path)
     if base:
         current = p.relative_to(base)
@@ -128,12 +132,6 @@ def tree(path, args, base=None, prefix_str=None, child_prefix_str=None, depth=0)
     if p.is_file() and args.no_files:
         return
 
-    if prefix_str is None:
-        prefix_str = ''
-    if child_prefix_str is None:
-        child_prefix_str = ''
-
-
     # todo collapse a/b/c
     print(prefix_str + color(p) + str(current) + Style.RESET_ALL, end='')
 
@@ -153,11 +151,14 @@ def tree(path, args, base=None, prefix_str=None, child_prefix_str=None, depth=0)
         if mtype is None:
             mtype = 'unknown'
         sz = os.path.getsize(str(p))
-        print(meta(' [{}, {}]'.format(mtype, hsize(sz))), end='')
+        child_str = meta(' [{}, {}]'.format(mtype, hsize(sz)))
+        pad = args.max_line_width - len(prefix_str) - len(str(current)) - len(child_str) - 1
+        print(pad * ' ', end='')
+        print(meta(child_str), end='')
         if not args.summary and printable(mtype):
-            file(p, args, child_prefix_str)
+            file(p, args, child_prefix_str, st)
         else:
-            print()
+            print(flush=True)
 
     elif p.is_dir():
         children = None
@@ -167,7 +168,7 @@ def tree(path, args, base=None, prefix_str=None, child_prefix_str=None, depth=0)
             if n == 0:
                 child_str = ' [📂, empty]'
             elif n == 1: # TODO just print parent as "foo/bar" and don't recurse
-                child_str = ' [📂, 1 child, '
+                child_str = ' [📂,   1    child, '
             else:
                 child_str = f' [📂, {len(children):3d} children, '
             ds = dir_stat(p)
@@ -175,7 +176,7 @@ def tree(path, args, base=None, prefix_str=None, child_prefix_str=None, depth=0)
                 child_str += f'{ds.n_dirs:6d} subdirs, {ds.n_files:6d} files, {hsize(ds.s_files, False)+" total size":>20s}]'
 
             # right justify
-            pad = WIDTH - len(prefix_str) - len(str(current)) - len(child_str)
+            pad = args.max_line_width - len(prefix_str) - len(str(current)) - len(child_str) - 1
             print(' ' * pad, end='')
             print(meta(child_str), end='', flush=True)
 
@@ -247,8 +248,8 @@ def bin_hex(data, width):
     return ' '.join(s)
 
 
-def xxd(data, width=None):
-    if width is None:
+def xxd(data, width):
+    if width < 0:
         width = 32
     for i in range(0, len(data), width):
         span = data[i:i + width]
@@ -262,38 +263,85 @@ def xxd(data, width=None):
         yield i, line
 
 
-def file(p, args, child_prefix_str):
-
-    lines = None
-    is_bin = False
+def is_text(data):
     try:
-        signal_alarm(1)
-        # 1s timeout on reads
-        data = p.read_bytes()
+        text = data.decode('utf8')
+    except ValueError as e:
+        return None
+
+    categories = collections.defaultdict(int)
+    for x in text:
+        for c in unicodedata.category(x):
+            categories[c] += 1
+    # TODO use this
+    log.debug(categories)
+    return text
+
+
+def syntax_highlight(p, text):
+    try:
+        import pygments
+        import pygments.lexers
+        import pygments.formatters
+        import pygments.styles
+    except ImportError:
+        return text
+    try:
+        mtype, encoding = mimetypes.guess_type(str(p))
+        lexer1, lexer2, lexer3 = None, None, None
+        try:   lexer1 = pygments.lexers.get_lexer_for_mimetype(mtype)
+        except pygments.util.ClassNotFound: pass
+        try:   lexer2 = pygments.lexers.get_lexer_for_filename(str(p))
+        except pygments.util.ClassNotFound: pass
+        try:   lexer3 = pygments.lexers.guess_lexer(text)
+        except pygments.util.ClassNotFound: pass
+        lexer = lexer1 or lexer2 or lexer3
+        if not lexer:
+            return text
+        style = pygments.styles.get_style_by_name('solarized-dark')
+        text = pygments.highlight(
+            text,
+            (lexer1 or lexer2 or lexer3),
+            # TODO this does not work on u14-screen-mobaxterm
+            # pygments.formatters.TerminalTrueColorFormatter(style=style))
+            pygments.formatters.Terminal256Formatter(style=style))
+    except Exception as e:
+        print(e, file=sys.stderr)
+    return text
+
+
+def file(p, args, child_prefix_str, st):
+    lines = None
+    try:
+        max_bytes = 0
+        signal_alarm(1) # 1s timeout on reads
+        if args.max_line_width and args.max_lines:
+            max_bytes = args.max_lines * args.max_line_width
+            data = p.open('rb').read(max_bytes)
+        else:
+            data = p.read_bytes()
         signal_alarm(0)
-        try:
-            text = data.decode('utf8')
-            categories = collections.defaultdict(int)
-            for x in text:
-                for c in unicodedata.category(x):
-                    categories[c] += 1
-            log.debug(categories)
-            lines = text.splitlines(True)
-        except ValueError as e:
-            log.debug('Assuming binary data. %r', e)
-            lines = list(xxd(data, args.max_line))
-            is_bin = True
-    except TimeoutError as e:
-        print(' : ' + Back.RED + Style.BRIGHT + 'ReadTimeout' + Style.RESET_ALL)
+    except (TimeoutError, IOError) as e:
+        if isinstance(e, TimeoutError):
+            msg = 'Read Timeout'
+        else:
+            msg = str(e.args[1])
+        print(f' : {Back.RED}{Style.BRIGHT}msg{Style.RESET_ALL}')
         return
-    except IOError as e:
-        print(' : ' + Back.RED + Style.BRIGHT + str(e.args[1]) + Style.RESET_ALL)
-        return
-    # except Exception as e:
-    #     print(' : ' + Back.RED + Style.BRIGHT + str(e) + Style.RESET_ALL)
-    #     return
+
+    if (not args.as_binary) and (text := is_text(data)):
+        is_bin = False
+        orig_text = text
+        text = syntax_highlight(p, text)
+        lines = text.splitlines(True)
+
+    else:
+        is_bin = True
+        lines = list(xxd(data, (args.max_line_width - len(child_prefix_str) - 16) // 4))
+
     if len(lines) == 0:
         print(' => ' + '⬔' + Style.RESET_ALL, flush=True)
+        line = ''
         return
     if len(lines) == 1:
         print(end='', flush=True)
@@ -308,9 +356,10 @@ def file(p, args, child_prefix_str):
             ))
             print(print_str)
             return
-        if args.max_line and len(child_prefix_str + line) > args.max_line:
+        lw = len(child_prefix_str + line)
+        if args.max_line_width and lw > args.max_line_width:
             l = len(line)
-            line = line[:args.max_line]
+            line = line[:args.max_line_width]
             line = line + meta(' [{:d} chars]'.format(l))
             # TODO leave \r\n at the end
         line = line \
@@ -319,28 +368,40 @@ def file(p, args, child_prefix_str):
         line = ' => ' + line
         print(line)
         return
+
     print(flush=True)
-    for i, line in enumerate(lines[:args.max_lines]):
+    if args.max_lines:
+        lines = lines[:args.max_lines]
+    if is_bin:
+        digs = 1 + int(math.log2(lines[-1][0] + 1) / 8)
+    else:
+        digs = len(str(len(lines)))
+    for i, line in enumerate(lines):
         if is_bin:
             i, line = line
-            print_str = child_prefix_str + Fore.YELLOW + '{}│ '.format(i.to_bytes(4, 'big').hex('.')) + Fore.WHITE + line + Style.RESET_ALL
+            print_str = child_prefix_str + Fore.YELLOW + '{}│ '.format(i.to_bytes(digs, 'big').hex('.')) + Fore.WHITE + line + Style.RESET_ALL
             sys.stdout.buffer.write(print_str.encode('utf8', errors='ignore'))
             continue
 
-        if args.max_line and len(child_prefix_str + line) > args.max_line:
+        # TODO this is wrong with syntax highlighting
+        lw = len(child_prefix_str + line)
+        if args.max_line_width and lw > args.max_line_width:
             l = len(line)
-            line = line[:args.max_line]
+            line = line[:args.max_line_width]
             while line[-1] in '\r\n':
                 line = line[:-1]
             line = line + meta(' [{:d} chars]'.format(l)) + '\r\n'
 
-        print_str = child_prefix_str + Fore.YELLOW + '{:2d}│ '.format(i + 1) + Fore.WHITE + line + Style.RESET_ALL
+        print_str = child_prefix_str + Fore.YELLOW + f'{(i + 1):{digs}d}│ ' + Fore.WHITE + line + Style.RESET_ALL
         sys.stdout.buffer.write(print_str.encode('utf8', errors='ignore'))
 
+    skipped_bytes = st.st_size - len(data)
     skipped = max(0, len(lines) - args.max_lines) if args.max_lines else 0
-    if skipped:
-        print(child_prefix_str + meta('... [{:d} lines]'.format(len(lines))))
-    elif not '\n' in line[-2:]:
-        print()
+    if skipped_bytes:
+        print(child_prefix_str + meta(f'... [{st.st_size:d} bytes total]'))
+    elif skipped:
+        print(child_prefix_str + meta(f'... [{len(lines)} lines total]'))
+    # elif '\n' not in line[-2:]:
+    #     print()
     print(end='', flush=True)
     sys.stdout.buffer.flush()
