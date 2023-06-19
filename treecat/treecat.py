@@ -29,15 +29,12 @@ except AttributeError:
     functools.cache = lambda x:x
 
 
-from colorama import Fore, Back, Style, init as colorama_init
-
-# TODO move to main
-# print(sys.stdout)
-# raise Foo
-# sys.stdout.reconfigure(encoding='utf-8')
-colorama_init(strip=False) # Allow colors when not a TTY ( | less)
+from colorama import Fore, Back, Style
 
 from ._version import __version__, version
+
+
+WIDTH = os.get_terminal_size(0)[0]
 
 
 def filter(path):
@@ -71,8 +68,8 @@ def printable(mtype):
     return True
 
 
-def hsize(x):
-    if x == 0:
+def hsize(x, empty=True):
+    if x == 0 and empty:
         return 'empty'
     n = 0
     while x > 9999:
@@ -110,18 +107,32 @@ def dir_stat(p):
     return Dirstat(n_dirs, n_files, s_files)
 
 
-def tree(path, args, base=None, prefix_str=None, child_prefix_str=None, depth=1):
+def tree(path, args, base=None, prefix_str=None, child_prefix_str=None, depth=0):
     p = pathlib.Path(path)
+    if base:
+        current = p.relative_to(base)
+    else:
+        current = p
+
+    try:
+        st = p.stat()
+    except (PermissionError, IOError, OSError) as e:
+        print(
+            prefix_str +
+            Fore.RED + str(current) + Style.RESET_ALL +
+            " : " +
+            Style.BRIGHT + Back.RED + str(e.args[1]) +
+            Style.RESET_ALL, flush=True)
+        return
+
+    if p.is_file() and args.no_files:
+        return
 
     if prefix_str is None:
         prefix_str = ''
     if child_prefix_str is None:
         child_prefix_str = ''
 
-    if base:
-        current = p.relative_to(base)
-    else:
-        current = p
 
     # todo collapse a/b/c
     print(prefix_str + color(p) + str(current) + Style.RESET_ALL, end='')
@@ -154,20 +165,22 @@ def tree(path, args, base=None, prefix_str=None, child_prefix_str=None, depth=1)
             children = sorted(p.iterdir())
             n = len(children)
             if n == 0:
-                child_str = ' [empty dir]'
-            elif n == 1:
-                # TODO just print parent as "foo/bar" and don't recurse
-                child_str = ' [  1   child,  '
+                child_str = ' [📂, empty]'
+            elif n == 1: # TODO just print parent as "foo/bar" and don't recurse
+                child_str = ' [📂, 1 child, '
             else:
-                child_str = f' [{len(children):3d} children, '
+                child_str = f' [📂, {len(children):3d} children, '
             ds = dir_stat(p)
             if n:
-                child_str += f'{ds.n_dirs:6d} subdirs, {ds.n_files:6d} files, {hsize(ds.s_files)+" total size":>20s}]'
-            print(' ' * (24 - len(str(current))), end='')
+                child_str += f'{ds.n_dirs:6d} subdirs, {ds.n_files:6d} files, {hsize(ds.s_files, False)+" total size":>20s}]'
+
+            # right justify
+            pad = WIDTH - len(prefix_str) - len(str(current)) - len(child_str)
+            print(' ' * pad, end='')
             print(meta(child_str), end='', flush=True)
 
         except IOError as e:
-            print(' : ' + Back.RED + Style.BRIGHT + e.__doc__ + Style.RESET_ALL, end='')
+            print(' : ' + Back.RED + Style.BRIGHT + str(e.args[1]) + Style.RESET_ALL, end='')
 
         if children and (args.max_depth == -1 or depth <= args.max_depth):
             print(flush=True)
@@ -256,7 +269,7 @@ def file(p, args, child_prefix_str):
     try:
         signal_alarm(1)
         # 1s timeout on reads
-        data = open(p, 'rb').read()
+        data = p.read_bytes()
         signal_alarm(0)
         try:
             text = data.decode('utf8')
@@ -280,7 +293,7 @@ def file(p, args, child_prefix_str):
     #     print(' : ' + Back.RED + Style.BRIGHT + str(e) + Style.RESET_ALL)
     #     return
     if len(lines) == 0:
-        print(' => ' + Style.DIM + Fore.BLACK + Back.WHITE + '␄' + Style.RESET_ALL, flush=True)
+        print(' => ' + '⬔' + Style.RESET_ALL, flush=True)
         return
     if len(lines) == 1:
         print(end='', flush=True)
@@ -301,8 +314,8 @@ def file(p, args, child_prefix_str):
             line = line + meta(' [{:d} chars]'.format(l))
             # TODO leave \r\n at the end
         line = line \
-                .replace('\r', ' ␍')\
-                .replace('\n', ' ␊') + ' ␃'
+                .replace('\r', ' 」')\
+                .replace('\n', ' 』') + '⬔'
         line = ' => ' + line
         print(line)
         return
