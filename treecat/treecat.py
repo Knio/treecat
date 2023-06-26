@@ -11,6 +11,8 @@ import string
 import sys
 import unicodedata
 
+from . import term
+
 log = logging.getLogger('treecat')
 
 try:
@@ -206,16 +208,51 @@ def tree(path, args, base=None, prefix_str=None, child_prefix_str=None, depth=0)
         print(flush=True)
 
 
-BIN_AL = set(string.ascii_letters + string.digits)
+BIN_AL = list(string.ascii_letters + string.digits)
 @functools.cache
 def bin_style(x):
     c = chr(x)
-    if c in BIN_AL:
-        return Fore.CYAN, c
+    if not c.isprintable():
+        c = '\uFFFD'
     if x == 0:
-        return Style.DIM, '\u2400'
+        r = term.rgb_from_hsv(0, 0, .2)
+        return term.ANSI.color_bg256(r) + Fore.BLACK, '\u2400'
     if x == 255:
-        return Fore.GREEN, c
+        return Back.RED, c
+    if x == 0x20:
+        bg = term.rgb_from_hsv(80, 1, .5)
+        return term.ANSI.color_bg256(bg), c
+    if 0 < x < 0x20:
+        i = 60 - x * 3
+        fg = term.rgb_from_hsv(i, .8, 1)
+        bg = term.rgb_from_hsv(60, 1, .2)
+        return term.ANSI.color_bg256(bg) + term.ANSI.color_fg256(fg), c
+    if 0x20 < x < 0x30:
+        i = 210 + x * 1.2
+        fg = term.rgb_from_hsv(i, .8, 1)
+        return term.ANSI.color_fg256(fg), c
+    if 0x39 < x < 0x41:
+        i = 260 + x * 1.2
+        fg = term.rgb_from_hsv(i, .8, 1)
+        return term.ANSI.color_fg256(fg), c
+    if 0x5a < x < 0x61:
+        i = 260 + x * 1.2
+        fg = term.rgb_from_hsv(i, .8, 1)
+        return term.ANSI.color_fg256(fg), c
+    if 0x7a < x < 0x7f:
+        i = 260 + x * 1.2
+        fg = term.rgb_from_hsv(i, .8, 1)
+        return term.ANSI.color_fg256(fg), c
+    if 0x7f < x:
+        i = 260 + x * 1.2
+        bg = term.rgb_from_hsv(310, .5, .2)
+        fg = term.rgb_from_hsv(i, .8, 1)
+        return term.ANSI.color_bg256(bg) + term.ANSI.color_fg256(fg), c
+    try:
+        i = BIN_AL.index(c)
+        r = term.rgb_from_hsv(80 + i * 2, 1, 1)
+        return term.ANSI.color_fg256(r), c
+    except ValueError: pass
     if not c.isprintable():
         return Style.BRIGHT + Fore.YELLOW, '\uFFFD'
     return '', c
@@ -223,29 +260,25 @@ def bin_style(x):
 
 def bin_str(data):
     s = []
-    cur_style = None
     for x in data:
         style, c = bin_style(x)
-        if style != cur_style:
-            s.append(Style.RESET_ALL)
-            s.append(style)
-            cur_style = style
-        s.append(c)
+        s.append(f'{style}{c}{Style.RESET_ALL}')
     return ''.join(s)
 
 
 def bin_hex(data, width):
     s = []
-    cur_style = None
+    last_style = ''
     for x in data:
         style, c = bin_style(x)
-        t = ''
-        if style != cur_style:
-            t = Style.RESET_ALL + style
-            cur_style = style
-        s.append(f'{t}{x:02x}')
-    s.extend(['  '] * (width - len(s)))
-    return ' '.join(s)
+        p = ' '
+        if last_style != style:
+            last_style = style
+            p = f'{Style.RESET_ALL} {style}'
+        s.append(f'{p}{x:02x}')
+    s.append(Style.RESET_ALL)
+    s.extend(['   '] * (width - len(s) + 1))
+    return ''.join(s)
 
 
 def xxd(data, width):
@@ -253,7 +286,7 @@ def xxd(data, width):
         width = 32
     for i in range(0, len(data), width):
         span = data[i:i + width]
-        line = ' {} {}│{} {}\n'.format(
+        line = ' {} {}│{} {}{}\n'.format(
             bin_hex(span, width),
             Style.RESET_ALL + Fore.YELLOW,
             Style.RESET_ALL,
