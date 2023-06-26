@@ -151,7 +151,7 @@ def tree(path, args, base=None, prefix_str=None, child_prefix_str=None, depth=0)
         if mtype is None:
             mtype = 'unknown'
         sz = os.path.getsize(str(p))
-        child_str = meta(' [{}, {}]'.format(mtype, hsize(sz)))
+        child_str = meta(' [{}, {:>12}]'.format(mtype, hsize(sz)))
         pad = args.max_line_width - len(prefix_str) - len(str(current)) - len(child_str) - 1
         print(pad * ' ', end='')
         print(meta(child_str), end='')
