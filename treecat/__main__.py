@@ -29,6 +29,7 @@ def main():
   parser.add_argument('-R', '--max-depth', type=int, default=-1)
   parser.add_argument('-B', '--as-binary', action='store_true', default=False)
   parser.add_argument('--no-color', action='store_true')
+  parser.add_argument('--file', type=str)
 
 
   args = parser.parse_args()
@@ -47,6 +48,12 @@ def main():
   sys.stdout.reconfigure(encoding='utf8')
 
   try:
+    if args.file:
+      import pathlib
+      print(args.file)
+      treecat.file(pathlib.Path(args.file), child_prefix_str='', st=None, args=args)
+      return
+
     if not args.path:
       treecat.tree('.', args)
 

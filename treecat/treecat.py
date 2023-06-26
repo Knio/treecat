@@ -326,7 +326,7 @@ def file(p, args, child_prefix_str, st):
             msg = 'Read Timeout'
         else:
             msg = str(e.args[1])
-        print(f' : {Back.RED}{Style.BRIGHT}msg{Style.RESET_ALL}')
+        print(f' : {Back.RED}{Style.BRIGHT}{msg}{Style.RESET_ALL}')
         return
 
     if (not args.as_binary) and (text := is_text(data)):
