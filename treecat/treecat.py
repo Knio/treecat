@@ -215,7 +215,7 @@ def bin_style(x):
     if not c.isprintable():
         c = '\uFFFD'
     if x == 0:
-        r = term.rgb_from_hsv(0, 0, .2)
+        r = term.ANSI.COLOR256.GREY + 2
         return term.ANSI.color_bg256(r) + Fore.BLACK, '\u2400'
     if x == 255:
         return Back.RED, c

@@ -208,6 +208,8 @@ class ANSI:
   class COLOR256(IntEnum):
     BLACK   = 16
     MAX_VAL = 5
+    GREY    = 232
+    GRAY    = GREY
 
   class MOUSE(IntEnum):
     X10               = 9       # doesn't work in mobaxterm
