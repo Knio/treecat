@@ -7,6 +7,7 @@ import math
 import mimetypes
 import os
 import pathlib
+import re
 import string
 import sys
 import unicodedata
@@ -43,6 +44,18 @@ def filter(path):
     return True
 
 
+
+def get_terminal_width():
+    try: return os.get_terminal_size(0).columns
+    except OSError: pass
+    try: return os.get_terminal_size(1).columns
+    except OSError: pass
+    raise ValueError(sys)
+    return 0
+
+TERM_WIDTH = get_terminal_width()
+
+
 def color(p):
     color = Fore.RED
     if p.is_symlink():
@@ -70,19 +83,36 @@ def printable(mtype):
 
 
 def hsize(x, empty=True):
+    s = ''
     if x == 0 and empty:
-        return 'empty'
+        s += term.ANSI.color_fg256(term.ANSI.COLOR256.GRAY + 4)
+        s += 'empty'
+        s += Style.RESET_ALL
+        return s
+
     n = 0
     while x > 9999:
         x /= 1024
         n += 1
-    return '{:d} {}'.format(int(x),
-        ['B', 'KiB', 'MiB', 'GiB', 'TiB'][n])
 
+    s += f'{int(x):d} '
+
+    fg = term.rgb_from_hsv(270 + n * 65, 0.3, .9)
+    s += term.ANSI.color_fg256(fg)
+    s += ['B', 'KiB', 'MiB', 'GiB', 'TiB'][n]
+    s += Style.RESET_ALL
+    return s
+
+def mtype_color(mtype):
+    # TODO: figure out 🎬 📄 (prints double wide and messes up formatting)
+    mtype = mtype.replace('video/', f'🎞️ /')
+    mtype = mtype.replace('image/', '🖼️ /')
+    mtype = mtype.replace('text/', '🗎 /')
+    mtype = mtype.replace('application/', '🗗 /')
+    return mtype
 
 def meta(s):
     return Style.RESET_ALL + Style.BRIGHT + Fore.BLACK + s + Style.RESET_ALL
-
 
 
 Dirstat = collections.namedtuple('Dir', ['n_dirs', 'n_files', 's_files'])
@@ -137,6 +167,10 @@ def tree(path, args, base=None, prefix_str=None, child_prefix_str=None, depth=0)
     # todo collapse a/b/c
     print(prefix_str + color(p) + str(current) + Style.RESET_ALL, end='')
 
+    color_chars = 14
+    folder = '📂'
+    # folder = '🗁 '
+
     if base and p.is_symlink():
         try:
             p2 = p.resolve(strict=True)
@@ -153,13 +187,29 @@ def tree(path, args, base=None, prefix_str=None, child_prefix_str=None, depth=0)
         if mtype is None:
             mtype = 'unknown'
         sz = os.path.getsize(str(p))
-        child_str = meta(' [{}, {:>12}]'.format(mtype, hsize(sz)))
-        pad = args.max_line_width - len(prefix_str) - len(str(current)) - len(child_str) - 1
+        child_str = meta(f' [{mtype_color(mtype)}, {hsize(sz):>23}]')
+
+        fg = []
+        pad_width = 18
+        if not args.summary and printable(mtype):
+            fg = list(file(p, args, child_prefix_str, st))
+
+        if len(fg) == 1:
+            l = fg.pop()
+            # l = repr(term.ANSI.strip(l))
+            # l = 'X' * len(l)
+            pw = 70 - len(prefix_str) - len(str(current))
+            aw = len(term.ANSI.strip(l))
+            pad_width -= max(aw, pw)
+            print(' ' * (pw - aw), end='')
+            print(l, end='')
+
+        pad = TERM_WIDTH - len(prefix_str) - len(str(current)) - len(child_str) + color_chars + pad_width
         print(pad * ' ', end='')
         print(meta(child_str), end='')
-        if not args.summary and printable(mtype):
-            file(p, args, child_prefix_str, st)
-        else:
+        for line in fg:
+            print(line, end='')
+        if not fg:
             print(flush=True)
 
     elif p.is_dir():
@@ -168,17 +218,18 @@ def tree(path, args, base=None, prefix_str=None, child_prefix_str=None, depth=0)
             children = sorted(p.iterdir())
             n = len(children)
             if n == 0:
-                child_str = ' [📂, empty]'
+                x = ' ' * (45 + color_chars)
+                child_str = f' [{folder} {x}{hsize(0)}]'
             elif n == 1: # TODO just print parent as "foo/bar" and don't recurse
-                child_str = ' [📂,   1    child, '
+                child_str = f' [{folder}   1    child, '
             else:
-                child_str = f' [📂, {len(children):3d} children, '
+                child_str = f' [{folder} {len(children):3d} children, '
             ds = dir_stat(p)
             if n:
-                child_str += f'{ds.n_dirs:6d} subdirs, {ds.n_files:6d} files, {hsize(ds.s_files, False)+" total size":>20s}]'
+                child_str += f'{ds.n_dirs:6d} subdirs, {ds.n_files:6d} files, total size: {hsize(ds.s_files, False):>23s}]'
 
             # right justify
-            pad = args.max_line_width - len(prefix_str) - len(str(current)) - len(child_str) - 1
+            pad = TERM_WIDTH - len(prefix_str) - len(str(current)) - len(child_str) + color_chars
             print(' ' * pad, end='')
             print(meta(child_str), end='', flush=True)
 
@@ -311,7 +362,32 @@ def is_text(data):
     return text
 
 
+
+def syntax_int(text):
+    if len(text) > 30:
+        return
+    try:
+        i = int(text)
+    except ValueError:
+        return
+    l = len(text)
+
+    prefix, digits, suffix = re.match(r'^(\D*)(\d+)(\s*)$', text).groups()
+    res = [suffix, Style.RESET_ALL]
+    for i in range(len(digits), 0, -3):
+        fg = term.rgb_from_hsv(i * 30, .2, 1)
+        res.append(text[i-3:i])
+        res.append(term.ANSI.color_fg256(fg))
+
+    res.append(prefix)
+    res.append(Fore.YELLOW)
+    return ''.join(reversed(res))
+
+
 def syntax_highlight(p, text):
+    # TODO: if file is a single integer, color by 000's
+    if int_text := syntax_int(text):
+        return int_text
     try:
         import pygments
         import pygments.lexers
@@ -359,7 +435,7 @@ def file(p, args, child_prefix_str, st):
             msg = 'Read Timeout'
         else:
             msg = str(e.args[1])
-        print(f' : {Back.RED}{Style.BRIGHT}{msg}{Style.RESET_ALL}')
+        yield (f' : {Back.RED}{Style.BRIGHT}{msg}{Style.RESET_ALL}')
         return
 
     if (not args.as_binary) and (text := is_text(data)):
@@ -373,36 +449,34 @@ def file(p, args, child_prefix_str, st):
         lines = list(xxd(data, (args.max_line_width - len(child_prefix_str) - 16) // 4))
 
     if len(lines) == 0:
-        print(' => ' + '⬔' + Style.RESET_ALL, flush=True)
-        line = ''
+        yield (' 🡺  ' + '⬔' + Style.RESET_ALL)
         return
+
     if len(lines) == 1:
-        print(end='', flush=True)
         line = lines[0]
         if is_bin:
             i, line = line
-            print_str = ''.join((
-                ' => ',
+            yield ''.join((
+                ' 🡺  ',
                 bin_hex(data, 0), Style.RESET_ALL,
                 Fore.YELLOW, ' │ ', Style.RESET_ALL,
                 bin_str(data),
             ))
-            print(print_str)
             return
         lw = len(child_prefix_str + line)
         if args.max_line_width and lw > args.max_line_width:
             l = len(line)
             line = line[:args.max_line_width]
             line = line + meta(' [{:d} chars]'.format(l))
-            # TODO leave \r\n at the end
+            # TODO leave \r\n at the end (??)
         line = line \
-                .replace('\r', ' 」')\
-                .replace('\n', ' 』') + '⬔'
-        line = ' => ' + line
-        print(line)
+                .replace('\r', ' ␍')\
+                .replace('\n', ' ␊') + ' ⮽ '
+        yield (' 🡺  ' + line)
         return
 
-    print(flush=True)
+    # many lines
+    # print(flush=True)
     if args.max_lines:
         lines = lines[:args.max_lines]
     if is_bin:
@@ -413,7 +487,8 @@ def file(p, args, child_prefix_str, st):
         if is_bin:
             i, line = line
             print_str = child_prefix_str + Fore.YELLOW + '{}│ '.format(i.to_bytes(digs, 'big').hex('.')) + Fore.WHITE + line + Style.RESET_ALL
-            sys.stdout.buffer.write(print_str.encode('utf8', errors='ignore'))
+            yield print_str
+            # sys.stdout.buffer.write(print_str.encode('utf8', errors='ignore'))
             continue
 
         # TODO this is wrong with syntax highlighting
@@ -426,15 +501,17 @@ def file(p, args, child_prefix_str, st):
             line = line + meta(' [{:d} chars]'.format(l)) + '\r\n'
 
         print_str = child_prefix_str + Fore.YELLOW + f'{(i + 1):{digs}d}│ ' + Fore.WHITE + line + Style.RESET_ALL
-        sys.stdout.buffer.write(print_str.encode('utf8', errors='ignore'))
+        # sys.stdout.buffer.write(print_str.encode('utf8', errors='ignore'))
+        yield print_str
 
     skipped_bytes = st.st_size - len(data)
     skipped = max(0, len(lines) - args.max_lines) if args.max_lines else 0
     if skipped_bytes:
-        print(child_prefix_str + meta(f'... [{st.st_size:d} bytes total]'))
+        yield (child_prefix_str + meta(f'... [{st.st_size:d} bytes total]'))
     elif skipped:
-        print(child_prefix_str + meta(f'... [{len(lines)} lines total]'))
+        yield (child_prefix_str + meta(f'... [{len(lines)} lines total]'))
     # elif '\n' not in line[-2:]:
     #     print()
-    print(end='', flush=True)
-    sys.stdout.buffer.flush()
+    # print(end='', flush=True)
+    yield ''
+    # sys.stdout.buffer.flush()

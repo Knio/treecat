@@ -5,6 +5,7 @@
 import argparse
 import locale
 import os
+import re
 import sys
 from enum import Enum, IntEnum
 
@@ -120,23 +121,67 @@ def t_unicode():
 
   print()
 
-  def print_codes(name, codes):
+  def print_codes(name, codes, span=32):
     codes = list(codes)
     print(f'{name}:')
-    span = 32
 
     for i in range(0, len(codes), span):
-        print(' ' * 8 + ' '.join(codes[i:i+span]))
-
+        print(' ' * 8 + '  '.join(codes[i:i+span]))
 
   # https://unicode-table.com/en/blocks/spacing-modifier-letters/
+  # https://unicode-explorer.com/blocks
+
   print_codes('Arrows',           map(chr, range(0x2190, 0x2200)))
-  print_codes('Control pictures', map(chr, range(0x2400, 0x2440)))
+  print_codes('Arrows-A',         map(chr, range(0x27f0, 0x2800)))
+  print_codes('Arrows-B',         map(chr, range(0x2900, 0x2980)))
+  print_codes('Arrows-C',         map(chr, range(0x1f800,0x1f900)))
+  print_codes('Miscellaneous Symbols and Arrows',
+                                  map(chr, range(0x2b00, 0x2c00)))
+  print_codes('Miscellaneous Symbols-B',
+                                  map(chr, range(0x2980, 0x2a00)))
+  print_codes('Miscellaneous Technical',
+                                  map(chr, range(0x2300, 0x2400)))
+  print_codes('Control Pictures', map(chr, range(0x2400, 0x2440)))
+  print_codes('Specials',         map(chr, range(0xfff0, 0x10000)))
+
+  print_codes('Currency Symbols', map(chr, range(0x20a0, 0x20d0)))
+
+  print_codes('General Punctuation',
+                                  map(chr, range(0x2000, 0x2070)))
+  print_codes('Supplemental Punctuation',
+                                  map(chr, range(0x2e00, 0x2e80)))
+
+  print_codes('Letterlike Symbols',
+                                  map(chr, range(0x2100, 0x2150)))
+  print_codes('Number Forms',
+                                  map(chr, range(0x2150, 0x2190)))
+  print_codes('Mathematical Operators',
+                                  map(chr, range(0x2200, 0x2300)))
+  print_codes('Supplemental Mathematical Operators',
+                                  map(chr, range(0x2a00, 0x2b00)))
+  print_codes('Mathematical Alphanumeric Symbols',
+                                  map(chr, range(0x1d400, 0x1d800)), span=26)
+
   print_codes('Box drawing',      map(chr, range(0x2500, 0x2580)))
   print_codes('Block elements',   map(chr, range(0x2580, 0x25a0)))
   print_codes('Geometric shapes', map(chr, range(0x25a0, 0x2600)))
-  print_codes('Miscellaneous symbols',
-                                  map(chr, range(0x2b00, 0x2c00)))
+  print_codes('Geometric Shapes Extended',
+                                  map(chr, range(0x1f780, 0x1f800)))
+  print_codes('Optical Character Recognition',
+                                  map(chr, range(0x2440, 0x2460)))
+  print_codes('Ideographic Description Characters',
+                                  map(chr, range(0x2ff0, 0x3000)))
+  print_codes('Halfwidth and Fullwidth Forms',
+                                  map(chr, range(0xff00, 0xfff0)))
+  print_codes('Alchemical Symbols',
+                                  map(chr, range(0x1f700, 0x1f780)))
+
+  print_codes('Miscellaneous Symbols and Pictographs',
+                                  map(chr, range(0x1f300, 0x1f600)), span=26)
+  print_codes('Supplemental Symbols and Pictographs',
+                                  map(chr, range(0x1f900, 0x1fa00)), span=26)
+  print_codes('Emoticons',
+                                  map(chr, range(0x1f600, 0x1f650)), span=26)
 
   print()
 
@@ -225,6 +270,13 @@ class ANSI:
     URXVT_EXT_MODE    = 1015
     PIXEL_POSITION    = 1016
 
+  CSI_RE = re.compile('\001?\033\\[((?:\\d|;)*)([a-zA-Z])\002?')
+  OSC_RE = re.compile('\001?\033\\]([^\a]*)(\a)\002?')
+  @staticmethod
+  def strip(x):
+    x = re.sub(ANSI.CSI_RE, '', x)
+    x = re.sub(ANSI.OSC_RE, '', x)
+    return x
 
   @staticmethod
   def graphics(x):
@@ -237,8 +289,6 @@ class ANSI:
   @staticmethod
   def color_bg8(x):
     return ANSI.graphics(ANSI.COLOR.BG8 + x)
-
-
 
   @staticmethod
   def color_256(x):
@@ -276,7 +326,6 @@ class ANSI:
   def graphics_reset():
     return ANSI.graphics(ANSI.GRAPHICS.RESET)
 
-
   @staticmethod
   def mouse(x):
     return f'{ANSI.ESC}{ANSI.CSI}?{x}{ANSI.CONTROL.MOUSE_ON}'
@@ -284,6 +333,8 @@ class ANSI:
   def mouse_off(x):
     return f'{ANSI.ESC}{ANSI.CSI}?{x}{ANSI.CONTROL.MOUSE_OFF}'
 
+
+assert ANSI.strip('x') == 'x'
 
 def t_colors():
   print('** Color support ' + '*' * 40)

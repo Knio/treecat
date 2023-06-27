@@ -31,7 +31,6 @@ def main():
   parser.add_argument('--no-color', action='store_true')
   parser.add_argument('--file', type=str)
 
-
   args = parser.parse_args()
 
   # TODO add bool here for if user-set or not, so we can still use term size
