@@ -119,6 +119,7 @@ Dirstat = collections.namedtuple('Dir', ['n_dirs', 'n_files', 's_files'])
 
 @functools.cache
 def dir_stat(p):
+    p = p.resolve()
     n_dirs = 0
     n_files = 0
     s_files = 0
@@ -127,13 +128,22 @@ def dir_stat(p):
         n_dirs += len(dirs)
         n_files += len(files)
         for f in files:
-            s = (d / f).stat()
-            s_files += s.st_size
+            try:
+                s = (d / f).stat()
+                s_files += s.st_size
+            except (FileNotFoundError, OSError):
+                pass
         for c in dirs:
-            r2 = dir_stat(d / c)
-            n_dirs += r2.n_dirs
-            n_files += r2.n_files
-            s_files += r2.s_files
+            try:
+                cd = (d / c).resolve(True)
+                if not cd.is_relative_to(p):
+                    continue
+                r2 = dir_stat(d / c)
+                n_dirs += r2.n_dirs
+                n_files += r2.n_files
+                s_files += r2.s_files
+            except (FileNotFoundError, OSError):
+                pass
         break # don't actually use os.walk's recursion
     return Dirstat(n_dirs, n_files, s_files)
 
@@ -159,6 +169,7 @@ def tree(path, args, base=None, prefix_str=None, child_prefix_str=None, depth=0)
             " : " +
             Style.BRIGHT + Back.RED + str(e.args[1]) +
             Style.RESET_ALL, flush=True)
+
         return
 
     if p.is_file() and args.no_files:
@@ -178,7 +189,7 @@ def tree(path, args, base=None, prefix_str=None, child_prefix_str=None, depth=0)
                 rel = p2.relative_to(base.resolve(strict=True))
             except ValueError:
                 rel = p2
-            print(' -> ' + color(p2) + str(rel) + Style.RESET_ALL)
+            print(' -> ' + color(p2) + str(p.readlink()) + Style.RESET_ALL)
         except IOError as e:
             print(' -> ' + Style.BRIGHT + Back.RED + str(e.args[1]) + Style.RESET_ALL)
 
@@ -224,10 +235,13 @@ def tree(path, args, base=None, prefix_str=None, child_prefix_str=None, depth=0)
                 child_str = f' [{folder}   1    child, '
             else:
                 child_str = f' [{folder} {len(children):3d} children, '
-            ds = dir_stat(p)
-            if n:
-                child_str += f'{ds.n_dirs:6d} subdirs, {ds.n_files:6d} files, total size: {hsize(ds.s_files, False):>23s}]'
-
+            try:
+                ds = dir_stat(p)
+                if n:
+                    child_str += f'{ds.n_dirs:6d} subdirs, {ds.n_files:6d} files, total size: {hsize(ds.s_files, False):>23s}]'
+            except:
+                import traceback
+                traceback.print_exc()
             # right justify
             pad = TERM_WIDTH - len(prefix_str) - len(str(current)) - len(child_str) + color_chars
             print(' ' * pad, end='')
