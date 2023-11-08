@@ -6,7 +6,7 @@ Displays a tree view of files and their contents
 
 Recommended:
 ```sh
-pip install treecat
+python3 -m pip install git+https://github.com/Knio/treecat.git@master
 ```
 
 Manual:
