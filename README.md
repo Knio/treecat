@@ -4,9 +4,14 @@ Displays a tree view of files and their contents
 
 ## Installation
 
-Recommended:
+Recommended (latest release):
 ```sh
 python3 -m pip install git+https://github.com/Knio/treecat.git@master
+```
+
+`master` branch:
+```sh
+python -m pip install git+https://github.com/Knio/treecat.git
 ```
 
 Manual:
