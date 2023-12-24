@@ -20,6 +20,10 @@ classifiers = [
 ]
 dynamic = ["version"]
 
+dependencies = [
+  "colorama"
+]
+
 [project.urls]
 Homepage = "https://github.com/Knio/treecat"
 Source = "https://github.com/Knio/treecat"
