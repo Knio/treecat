@@ -212,6 +212,7 @@ def tree(path, args, base=None, prefix_str=None, child_prefix_str=None, depth=0)
             fg = list(file(p, args, child_prefix_str, st))
 
         if len(fg) == 1:
+            # TODO: break out if it doesn't fit in max_line_width
             l = fg.pop()
             lw = get_string_width(l)
             log.debug('single line file: %r', l)
@@ -232,7 +233,7 @@ def tree(path, args, base=None, prefix_str=None, child_prefix_str=None, depth=0)
                 lw,
                 pp
             )
-            # TODO this doesn't look right
+            # TODO: this doesn't look right
             print(' ' * pp, end='')
             print(l, end='')
 
@@ -242,6 +243,8 @@ def tree(path, args, base=None, prefix_str=None, child_prefix_str=None, depth=0)
         pad_s = pad * ' '
         print(term.ANSI.graphics(term.ANSI.GRAPHICS.DIM) + pad_s + term.ANSI.graphics_reset(), end='')
         print(meta(child_str), end='')
+        if fg:
+            print()
         for line in fg:
             print(line, end='')
         if not fg:
@@ -485,7 +488,7 @@ def file(p, args, child_prefix_str, st):
             msg = 'Read Timeout'
         else:
             msg = str(e.args[1])
-        yield (f' : {Back.RED}{Style.BRIGHT}{msg}{Style.RESET_ALL}')
+        yield (f' 🡺  {Back.RED}{Style.BRIGHT}{msg}{Style.RESET_ALL}')
         return
 
     if (not args.as_binary) and (text := is_text(data)):
@@ -527,12 +530,15 @@ def file(p, args, child_prefix_str, st):
                 .replace('\t', ' → ')\
                       + ' ⮽ '\
         # TODO add the arrow inside tree() instead?
-        yield (' 🡺  ' + line)
+        yield f' 🡺  {line}'
         return
 
     # many lines
+    read_lines = len(lines)
+    skipped = 0
     # print(flush=True)
     if args.max_lines:
+        skipped = read_lines - args.max_lines
         lines = lines[:args.max_lines]
     if is_bin:
         digs = 1 + int(math.log2(lines[-1][0] + 1) / 8)
@@ -543,28 +549,25 @@ def file(p, args, child_prefix_str, st):
             i, line = line
             print_str = child_prefix_str + Fore.YELLOW + '{}│ '.format(i.to_bytes(digs, 'big').hex('.')) + Fore.WHITE + line + Style.RESET_ALL
             yield print_str
-            # sys.stdout.buffer.write(print_str.encode('utf8', errors='ignore'))
             continue
 
-        # TODO this is wrong with syntax highlighting
-        lw = len(child_prefix_str + line)
+        lw = get_string_width(child_prefix_str + line)
         if args.max_line_width and lw > args.max_line_width:
-            l = len(line)
+            l = get_string_width(line)
             line = line[:args.max_line_width]
             while line[-1] in '\r\n':
                 line = line[:-1]
-            line = line + meta(' [{:d} chars]'.format(l)) + '\r\n'
+            line = line + meta(f' [{l:d} chars]') + '\r\n'
 
         print_str = child_prefix_str + Fore.YELLOW + f'{(i + 1):{digs}d}│ ' + Fore.WHITE + line + Style.RESET_ALL
-        # sys.stdout.buffer.write(print_str.encode('utf8', errors='ignore'))
         yield print_str
 
     skipped_bytes = st.st_size - len(data)
-    skipped = max(0, len(lines) - args.max_lines) if args.max_lines else 0
+    log.debug(f'skipped_bytes: {skipped_bytes}, skipped: {skipped}')
     if skipped_bytes:
-        yield (child_prefix_str + meta(f'... [{st.st_size:d} bytes total]'))
+        yield child_prefix_str + meta(f'... [{st.st_size:d} bytes total]\n')
     elif skipped:
-        yield (child_prefix_str + meta(f'... [{len(lines)} lines total]'))
+        yield child_prefix_str + meta(f'... [{read_lines} lines total]\n')
     # elif '\n' not in line[-2:]:
     #     print()
     # print(end='', flush=True)
