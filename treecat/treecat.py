@@ -45,15 +45,15 @@ def filter(path):
 
 
 
-def get_terminal_width():
-    try: return os.get_terminal_size(0).columns
-    except OSError: pass
-    try: return os.get_terminal_size(1).columns
-    except OSError: pass
-    raise ValueError(sys)
-    return 0
+# def get_terminal_width():
+#     try: return os.get_terminal_size(0).columns
+#     except OSError: pass
+#     try: return os.get_terminal_size(1).columns
+#     except OSError: pass
+#     raise ValueError(sys)
+#     return 0
 
-TERM_WIDTH = get_terminal_width()
+# TERM_WIDTH = get_terminal_width()
 
 
 def color(p):
@@ -194,7 +194,7 @@ def tree(path, args, base=None, prefix_str=None, child_prefix_str=None, depth=0)
             print(' -> ' + Style.BRIGHT + Back.RED + str(e.args[1]) + Style.RESET_ALL)
 
     elif p.is_file():
-        mtype, encoding = mimetypes.guess_type(str(p))
+        mtype, _encoding = mimetypes.guess_type(str(p))
         if mtype is None:
             mtype = 'unknown'
         sz = os.path.getsize(str(p))
@@ -215,7 +215,7 @@ def tree(path, args, base=None, prefix_str=None, child_prefix_str=None, depth=0)
             print(' ' * (pw - aw), end='')
             print(l, end='')
 
-        pad = TERM_WIDTH - len(prefix_str) - len(str(current)) - len(child_str) + color_chars + pad_width
+        pad = args.max_line_width - len(prefix_str) - len(str(current)) - len(child_str) + color_chars + pad_width
         print(pad * ' ', end='')
         print(meta(child_str), end='')
         for line in fg:
@@ -243,7 +243,7 @@ def tree(path, args, base=None, prefix_str=None, child_prefix_str=None, depth=0)
                 import traceback
                 traceback.print_exc()
             # right justify
-            pad = TERM_WIDTH - len(prefix_str) - len(str(current)) - len(child_str) + color_chars
+            pad = args.max_line_width - len(prefix_str) - len(str(current)) - len(child_str) + color_chars
             print(' ' * pad, end='')
             print(meta(child_str), end='', flush=True)
 
@@ -347,6 +347,7 @@ def bin_hex(data, width):
 
 
 def xxd(data, width):
+    log.debug('width: %d', width)
     if width < 0:
         width = 32
     for i in range(0, len(data), width):
@@ -371,8 +372,11 @@ def is_text(data):
     for x in text:
         for c in unicodedata.category(x):
             categories[c] += 1
-    # TODO use this
     log.debug(categories)
+    total = sum(categories.values())
+    if categories['C'] / total > 0.05:
+        return False
+    # TODO add more categories
     return text
 
 
@@ -462,6 +466,7 @@ def file(p, args, child_prefix_str, st):
         is_bin = True
         lines = list(xxd(data, (args.max_line_width - len(child_prefix_str) - 16) // 4))
 
+    log.debug(f'is_bin={is_bin}, len(lines)={len(lines)}')
     if len(lines) == 0:
         yield (' 🡺  ' + '⬔' + Style.RESET_ALL)
         return
