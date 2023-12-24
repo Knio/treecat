@@ -55,6 +55,11 @@ def filter(path):
 
 # TERM_WIDTH = get_terminal_width()
 
+def get_string_width(s):
+    s = term.ANSI.strip(s)
+    s = s.replace('\t', 'T' * 6)
+    return len(s)
+
 
 def color(p):
     color = Fore.RED
@@ -149,6 +154,7 @@ def dir_stat(p):
 
 
 def tree(path, args, base=None, prefix_str=None, child_prefix_str=None, depth=0):
+    log.debug('tree(%s, <args>, %s, %r, %r, %s)', path, base, prefix_str, child_prefix_str, depth)
     if prefix_str is None:
         prefix_str = ''
     if child_prefix_str is None:
@@ -171,11 +177,11 @@ def tree(path, args, base=None, prefix_str=None, child_prefix_str=None, depth=0)
             Style.RESET_ALL, flush=True)
 
         return
-
+    log.debug('stat: %s', st)
     if p.is_file() and args.no_files:
         return
 
-    # todo collapse a/b/c
+    # TODO collapse a/b/c
     print(prefix_str + color(p) + str(current) + Style.RESET_ALL, end='')
 
     color_chars = 14
@@ -189,9 +195,9 @@ def tree(path, args, base=None, prefix_str=None, child_prefix_str=None, depth=0)
                 rel = p2.relative_to(base.resolve(strict=True))
             except ValueError:
                 rel = p2
-            print(' -> ' + color(p2) + str(p.readlink()) + Style.RESET_ALL)
+            print(' ⇨ ' + color(p2) + str(p.readlink()) + Style.RESET_ALL)
         except IOError as e:
-            print(' -> ' + Style.BRIGHT + Back.RED + str(e.args[1]) + Style.RESET_ALL)
+            print(' ⇨ ' + Style.BRIGHT + Back.RED + str(e.args[1]) + Style.RESET_ALL)
 
     elif p.is_file():
         mtype, _encoding = mimetypes.guess_type(str(p))
@@ -207,16 +213,34 @@ def tree(path, args, base=None, prefix_str=None, child_prefix_str=None, depth=0)
 
         if len(fg) == 1:
             l = fg.pop()
-            # l = repr(term.ANSI.strip(l))
-            # l = 'X' * len(l)
-            pw = 70 - len(prefix_str) - len(str(current))
-            aw = len(term.ANSI.strip(l))
-            pad_width -= max(aw, pw)
-            print(' ' * (pw - aw), end='')
+            lw = get_string_width(l)
+            log.debug('single line file: %r', l)
+            log.debug('        stripped: %r', term.ANSI.strip(l))
+            pw = args.max_line_width - len(prefix_str) - len(str(current)) - len(child_str)
+            # l = 'X' * aw
+            pad_width -= max(lw, pw)
+            pp = pw - lw
+            log.debug(
+                'prefix_str: %d '
+                'name: %d '
+                'line: %d '
+                'line stripped: %d '
+                'pre-line padding: %s',
+                len(prefix_str),
+                len(str(current)),
+                len(l),
+                lw,
+                pp
+            )
+            # TODO this doesn't look right
+            print(' ' * pp, end='')
             print(l, end='')
 
         pad = args.max_line_width - len(prefix_str) - len(str(current)) - len(child_str) + color_chars + pad_width
-        print(pad * ' ', end='')
+        log.debug('pad: %s', pad)
+        pad_s = pad * '┈'
+        pad_s = pad * ' '
+        print(term.ANSI.graphics(term.ANSI.GRAPHICS.DIM) + pad_s + term.ANSI.graphics_reset(), end='')
         print(meta(child_str), end='')
         for line in fg:
             print(line, end='')
@@ -232,19 +256,26 @@ def tree(path, args, base=None, prefix_str=None, child_prefix_str=None, depth=0)
                 x = ' ' * (45 + color_chars)
                 child_str = f' [{folder} {x}{hsize(0)}]'
             elif n == 1: # TODO just print parent as "foo/bar" and don't recurse
-                child_str = f' [{folder}   1    child, '
+                child_str = f' [{folder}   1    child'
             else:
-                child_str = f' [{folder} {len(children):3d} children, '
-            try:
-                ds = dir_stat(p)
-                if n:
-                    child_str += f'{ds.n_dirs:6d} subdirs, {ds.n_files:6d} files, total size: {hsize(ds.s_files, False):>23s}]'
-            except:
-                import traceback
-                traceback.print_exc()
+                child_str = f' [{folder} {len(children):3d} children'
+            if n and args.sums:
+                try:
+                    ds = dir_stat(p)
+                    child_str += f', {ds.n_dirs:6d} subdirs, {ds.n_files:6d} files, total size: {hsize(ds.s_files, False):>23s}]'
+                except:
+                    import traceback
+                    traceback.print_exc()
+                    # ??
+            elif n:
+                # child_str += ' ' * (45 + color_chars - 1)
+                child_str += ']'
+                color_chars -= 15
+
+
             # right justify
             pad = args.max_line_width - len(prefix_str) - len(str(current)) - len(child_str) + color_chars
-            print(' ' * pad, end='')
+            print('.' * pad, end='')
             print(meta(child_str), end='', flush=True)
 
         except IOError as e:
@@ -414,7 +445,7 @@ def syntax_highlight(p, text):
     except ImportError:
         return text
     try:
-        mtype, encoding = mimetypes.guess_type(str(p))
+        mtype, _encoding = mimetypes.guess_type(str(p))
         lexer1, lexer2, lexer3 = None, None, None
         try:   lexer1 = pygments.lexers.get_lexer_for_mimetype(mtype)
         except pygments.util.ClassNotFound: pass
@@ -438,6 +469,7 @@ def syntax_highlight(p, text):
 
 
 def file(p, args, child_prefix_str, st):
+    log.debug('file(%s, <args>, %r, <st>)', p, child_prefix_str)
     lines = None
     try:
         max_bytes = 0
@@ -488,9 +520,13 @@ def file(p, args, child_prefix_str, st):
             line = line[:args.max_line_width]
             line = line + meta(' [{:d} chars]'.format(l))
             # TODO leave \r\n at the end (??)
+        # TODO split this out to a function, and add colors
         line = line \
                 .replace('\r', ' ␍')\
-                .replace('\n', ' ␊') + ' ⮽ '
+                .replace('\n', ' ␊')\
+                .replace('\t', ' → ')\
+                      + ' ⮽ '\
+        # TODO add the arrow inside tree() instead?
         yield (' 🡺  ' + line)
         return
 

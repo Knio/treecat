@@ -33,6 +33,7 @@ def main():
   parser.add_argument('-R', '--max-depth', type=int, default=-1)
   parser.add_argument('-B', '--as-binary', action='store_true', default=False)
   parser.add_argument('--no-color', action='store_true')
+  parser.add_argument('--no-sums', dest='sums', action='store_false', default=True)
   parser.add_argument('--file', type=str)
   parser.add_argument('--debug', action='store_true')
 
