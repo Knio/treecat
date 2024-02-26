@@ -247,8 +247,6 @@ def tree(path, args, base=None, prefix_str=None, child_prefix_str=None, depth=0)
             print()
         for line in fg:
             print(line, end='')
-        if not fg:
-            print(flush=True)
 
     elif p.is_dir():
         children = None
