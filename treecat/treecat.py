@@ -406,6 +406,8 @@ def is_text(data):
             categories[c] += 1
     log.debug(categories)
     total = sum(categories.values())
+    if not total:
+        return None;
     if categories['C'] / total > 0.05:
         return False
     # TODO add more categories
