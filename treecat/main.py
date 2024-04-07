@@ -6,6 +6,7 @@ Tool for displaying files and directories as a tree.
 import argparse
 import logging
 import os
+import pathlib
 import sys
 
 import colorama
@@ -36,8 +37,15 @@ def main():
   parser.add_argument('--no-sums', dest='sums', action='store_false', default=True)
   parser.add_argument('--file', type=str)
   parser.add_argument('--debug', action='store_true')
+  parser.add_argument('--version', '-V', action='store_true', help='Print version info and exit')
 
   args = parser.parse_args()
+
+  if args.version:
+    print(f'treecat version {treecat.version}')
+    print(f'  installed to {pathlib.Path(__file__).parent}')
+    print(f'  running on {sys.executable} version {sys.version}')
+    return
 
   if args.debug:
     logging.basicConfig(level=logging.DEBUG)
@@ -59,7 +67,6 @@ def main():
 
   try:
     if args.file:
-      import pathlib
       f = pathlib.Path(args.file)
       st = f.stat()
       lines = treecat.file(f, child_prefix_str='', st=st, args=args)

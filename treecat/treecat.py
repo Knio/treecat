@@ -104,7 +104,7 @@ def hsize(x, empty=True):
 
     fg = term.rgb_from_hsv(270 + n * 65, 0.3, .9)
     s += term.ANSI.color_fg256(fg)
-    s += ['B', 'KiB', 'MiB', 'GiB', 'TiB'][n]
+    s += ['  B', 'KiB', 'MiB', 'GiB', 'TiB'][n]
     s += Style.RESET_ALL
     return s
 
@@ -136,6 +136,8 @@ def dir_stat(p):
             try:
                 s = (d / f).stat()
                 s_files += s.st_size
+            except KeyboardInterrupt:
+                raise
             except (FileNotFoundError, OSError):
                 pass
         for c in dirs:
@@ -276,7 +278,7 @@ def tree(path, args, base=None, prefix_str=None, child_prefix_str=None, depth=0)
 
             # right justify
             pad = args.max_line_width - len(prefix_str) - len(str(current)) - len(child_str) + color_chars
-            print('.' * pad, end='')
+            print(' ' * pad, end='')
             print(meta(child_str), end='', flush=True)
 
         except IOError as e:
