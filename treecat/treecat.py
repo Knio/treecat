@@ -407,9 +407,11 @@ def is_text(data):
         for c in unicodedata.category(x):
             categories[c] += 1
     log.debug(categories)
-    total = sum(categories.values())
+    total = len(text)
     if not total:
-        return None;
+        return None
+    if (categories['L'] + categories['N']) / total > 0.6:
+        return text
     if categories['C'] / total > 0.05:
         return False
     # TODO add more categories
