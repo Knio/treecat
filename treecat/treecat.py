@@ -410,13 +410,18 @@ def is_text(data):
     total = len(text)
     if not total:
         return None
-    if (categories['L'] + categories['N']) / total > 0.6:
+    printable = sum((
+        categories['L'],
+        categories['N'],
+        categories['Z'],
+        categories['C'],
+    ))
+    if (printable / total) > 0.6:
         return text
     if categories['C'] / total > 0.05:
         return False
     # TODO add more categories
     return text
-
 
 
 def syntax_int(text):
