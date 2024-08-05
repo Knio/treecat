@@ -66,10 +66,21 @@ def main():
   sys.stdout.reconfigure(encoding='utf8')
 
   try:
+    lines = None
+
+    if args.path == ['-']:
+      class fp:
+        def read_bytes(self):
+          return sys.stdin.read().encode('utf8')
+
+      lines = treecat.file(fp(), child_prefix_str='', st=None, args=args)
+
     if args.file:
       f = pathlib.Path(args.file)
       st = f.stat()
       lines = treecat.file(f, child_prefix_str='', st=st, args=args)
+
+    if lines:
       for line in lines:
         print(line, end='', flush=False)
       print(end='', flush=True)
@@ -92,11 +103,6 @@ def main():
       sys.stderr.close()
       return
     raise
-  # except OSError as e:
-  #   if e.errno == 22: # Invalid argument
-  #     sys.stderr.close()
-  #     return
-  #   raise
 
 
 if __name__ == '__main__':
