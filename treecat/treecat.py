@@ -575,10 +575,11 @@ def file(p, args, child_prefix_str, st):
         print_str = child_prefix_str + Fore.YELLOW + f'{(i + 1):{digs}d}│ ' + Fore.WHITE + line + Style.RESET_ALL
         yield print_str
 
-    skipped_bytes = st.st_size - len(data)
-    log.debug(f'skipped_bytes: {skipped_bytes}, skipped: {skipped}')
-    if skipped_bytes:
-        yield child_prefix_str + meta(f'... [{st.st_size:d} bytes total]\n')
+    if st:
+        skipped_bytes = st.st_size - len(data)
+        log.debug(f'skipped_bytes: {skipped_bytes}, skipped: {skipped}')
+        if skipped_bytes:
+            yield child_prefix_str + meta(f'... [{st.st_size:d} bytes total]\n')
     elif skipped:
         yield child_prefix_str + meta(f'... [{read_lines} lines total]\n')
     # elif '\n' not in line[-2:]:
