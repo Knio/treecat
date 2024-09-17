@@ -199,7 +199,11 @@ def tree(path, args, base=None, prefix_str=None, child_prefix_str=None, depth=0)
                 rel = p2
             print(' ⇨ ' + color(p2) + str(p.readlink()) + Style.RESET_ALL)
         except IOError as e:
-            print(' ⇨ ' + Style.BRIGHT + Back.RED + str(e.args[1]) + Style.RESET_ALL)
+            if e.errno == 2:
+                # TODO: for [socket:234] files, lsof knows how to map to IPs
+                print(f' ⇨ {Style.BRIGHT}{Back.RED}{p.readlink()}{Style.RESET_ALL}')
+            else:
+                print(f' ⇨ [0]{Style.BRIGHT}{Back.RED}{e:s}{Style.RESET_ALL}')
 
     elif p.is_file():
         mtype, _encoding = mimetypes.guess_type(str(p))
@@ -282,7 +286,7 @@ def tree(path, args, base=None, prefix_str=None, child_prefix_str=None, depth=0)
             print(meta(child_str), end='', flush=True)
 
         except IOError as e:
-            print(' : ' + Back.RED + Style.BRIGHT + str(e.args[1]) + Style.RESET_ALL, end='')
+            print(f' : [1]{Back.RED}{Style.BRIGHT}{e.args[1]:s}{Style.RESET_ALL}', end='')
 
         if children and (args.max_depth == -1 or depth <= args.max_depth):
             print(flush=True)
@@ -497,7 +501,7 @@ def file(p, args, child_prefix_str, st):
             msg = 'Read Timeout'
         else:
             msg = str(e.args[1])
-        yield (f' 🡺  {Back.RED}{Style.BRIGHT}{msg}{Style.RESET_ALL}')
+        yield (f' 🡺  [2]{Back.RED}{Style.BRIGHT}{msg}{Style.RESET_ALL}')
         return
 
     if (not args.as_binary) and (text := is_text(data)):
