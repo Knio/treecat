@@ -214,10 +214,10 @@ def tree(path, args, base=None, prefix_str=None, child_prefix_str=None, depth=0)
 
         fg = []
         pad_width = 18
-        if not args.summary and printable(mtype):
+        if (not args.summary) and printable(mtype):
             fg = list(file(p, args, child_prefix_str, st))
-
-        if len(fg) == 1:
+        inline = len(fg) == 1
+        if inline:
             # TODO: break out if it doesn't fit in max_line_width
             l = fg.pop()
             lw = get_string_width(l)
@@ -249,8 +249,9 @@ def tree(path, args, base=None, prefix_str=None, child_prefix_str=None, depth=0)
         pad_s = pad * ' '
         print(term.ANSI.graphics(term.ANSI.GRAPHICS.DIM) + pad_s + term.ANSI.graphics_reset(), end='')
         print(meta(child_str), end='')
-        if fg:
-            print()
+        print()
+        # if fg:
+        #     print()
         for line in fg:
             print(line, end='')
 
@@ -304,8 +305,9 @@ def tree(path, args, base=None, prefix_str=None, child_prefix_str=None, depth=0)
                     prefix_str=child_prefix_str + h,
                     child_prefix_str=child_prefix_str + c,
                     depth=depth + 1)
-        else:
-            print()
+        # else:
+        #     print()
+        print()
 
     else:
         print(flush=True)
