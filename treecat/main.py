@@ -9,6 +9,7 @@ import os
 import pathlib
 import sys
 
+# TODO replace with treecat.term
 import colorama
 
 import treecat
@@ -26,23 +27,32 @@ def main():
     formatter_class=argparse.RawTextHelpFormatter,
     description=__doc__)
 
-  parser.add_argument('path', nargs='*')
-  parser.add_argument('-s', '--summary', action='store_true')
-  parser.add_argument('-L', '--max-lines', type=int, default=0)
-  parser.add_argument('-W', '--max-line-width', type=int, default=-1)
-  parser.add_argument('-D', '--no-files', action='store_true')
-  parser.add_argument('-R', '--max-depth', type=int, default=-1)
-  parser.add_argument('-B', '--as-binary', action='store_true', default=False)
-  parser.add_argument('--no-color', action='store_true')
-  parser.add_argument('--no-sums', dest='sums', action='store_false', default=True)
-  parser.add_argument('--file', type=str)
-  parser.add_argument('--debug', action='store_true')
+  parser.add_argument('paths', nargs='*')
   parser.add_argument('--version', '-V', action='store_true', help='Print version info and exit')
+  parser.add_argument('-s', '--summary', action='store_true', help='Show file names only, not contents')
+  # TODO: -N for tail
+  parser.add_argument('-L', '--max-lines', type=int, default=0, help='Show only first MAX_LINES lines of files (head)')
+  parser.add_argument('-W', '--max-line-width', type=int, default=-1)
+  parser.add_argument('-D', '--no-files', action='store_true', help='Show folders only, no files')
+  # TODO: -xdev
+  parser.add_argument('-R', '--max-depth', type=int, default=-1, help='Recurse only MAX_DEPTH levels deep into folders')
+  parser.add_argument('-B', '--as-binary', action='store_true', default=False, help='Show all files as hex (binary)')
+  parser.add_argument('--no-color', action='store_true', help='Do not use ANSI colors')
+  parser.add_argument('--no-sums', dest='sums', action='store_false', default=True)
+  parser.add_argument('--file', type=str, help='Show one file only (no structure/headers)')
+  parser.add_argument('--debug', action='store_true')
+  parser.add_argument('-S', '--sudo', action='store_true', help='Escalate using sudo before starting')
+  parser.add_argument('--escalated', action='store_true', help=argparse.SUPPRESS)
 
   args = parser.parse_args()
 
+  if args.sudo and not args.escalated:
+    paths = get_import_paths(colorama)
+    cmd = escalate(paths) + ['--escalated']
+    os.execv('/usr/bin/sudo', cmd)
+
   if args.version:
-    print(f'treecat version {treecat.version}')
+    print(f'treecat version {treecat.version} © Tom Flanagan 2024')
     print(f'  installed to {pathlib.Path(__file__).parent}')
     print(f'  running on {sys.executable} version {sys.version}')
     return
@@ -68,7 +78,7 @@ def main():
   try:
     lines = None
 
-    if args.path == ['-']:
+    if args.paths == ['-']:
       class fp:
         def read_bytes(self):
           return sys.stdin.read().encode('utf8')
@@ -86,10 +96,10 @@ def main():
       print(end='', flush=True)
       return
 
-    if not args.path:
+    if not args.paths:
       treecat.tree('.', args)
 
-    for path in args.path:
+    for path in args.paths:
       treecat.tree(path, args)
 
   except KeyboardInterrupt:
@@ -103,6 +113,33 @@ def main():
       sys.stderr.close()
       return
     raise
+
+
+
+
+
+def get_import_paths(*modules):
+  paths = set()
+  for m in modules:
+    paths.add(pathlib.Path(m.__file__).parent.parent)
+  return list(map(str, paths))
+
+
+def escalate(paths, *args):
+  env = dict(
+    PYTHONDONTWRITEBYTECODE='1',
+    PYTHONPATH=':'.join(paths)
+  )
+  argv = pathlib.Path('/proc/self/cmdline').read_text().split('\0')[1:-1]
+
+  cmd = [
+    'sudo', '-E',
+    *[f"'{k}={v}'" for k, v in env.items()],
+    sys.executable, *argv, *args,
+  ]
+  return cmd
+
+
 
 
 if __name__ == '__main__':

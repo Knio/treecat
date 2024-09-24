@@ -144,6 +144,10 @@ def dir_stat(p):
             try:
                 cd = (d / c).resolve(True)
                 if not cd.is_relative_to(p):
+                    # outside of current subdir
+                    continue
+                if d.samefile(cd):
+                    # points back to itself
                     continue
                 r2 = dir_stat(d / c)
                 n_dirs += r2.n_dirs
