@@ -201,7 +201,7 @@ def tree(path, args, base=None, prefix_str=None, child_prefix_str=None, depth=0)
                 rel = p2.relative_to(base.resolve(strict=True))
             except ValueError:
                 rel = p2
-            print(' ⇨ ' + color(p2) + str(p.readlink()) + Style.RESET_ALL)
+            print(' ⇨ ' + color(p2) + str(rel) + Style.RESET_ALL)
         except IOError as e:
             if e.errno == 2:
                 # TODO: for [socket:234] files, lsof knows how to map to IPs
