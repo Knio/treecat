@@ -12,6 +12,12 @@ import string
 import sys
 import unicodedata
 
+
+# TODO use own term
+from colorama import Fore, Back, Style
+
+
+from . import pretty
 from . import term
 
 log = logging.getLogger('treecat')
@@ -27,33 +33,12 @@ except AttributeError:
     # Alarm signal not supported on windows
     signal_alarm = lambda x:None
 
-try:
-    functools.cache
-except AttributeError:
-    functools.cache = lambda x:x
-
-
-from colorama import Fore, Back, Style
-
-from ._version import __version__, version
-
 
 def filter(path):
     if path.basename[0] == '.':
         return False
     return True
 
-
-
-# def get_terminal_width():
-#     try: return os.get_terminal_size(0).columns
-#     except OSError: pass
-#     try: return os.get_terminal_size(1).columns
-#     except OSError: pass
-#     raise ValueError(sys)
-#     return 0
-
-# TERM_WIDTH = get_terminal_width()
 
 def get_string_width(s):
     s = term.ANSI.strip(s)
@@ -87,27 +72,6 @@ def printable(mtype):
     return True
 
 
-def hsize(x, empty=True):
-    s = ''
-    if x == 0 and empty:
-        s += term.ANSI.color_fg256(term.ANSI.COLOR256.GRAY + 4)
-        s += 'empty'
-        s += Style.RESET_ALL
-        return s
-
-    n = 0
-    while x > 9999:
-        x /= 1024
-        n += 1
-
-    s += f'{int(x):d} '
-
-    fg = term.rgb_from_hsv(270 + n * 65, 0.3, .9)
-    s += term.ANSI.color_fg256(fg)
-    s += ['  B', 'KiB', 'MiB', 'GiB', 'TiB'][n]
-    s += Style.RESET_ALL
-    return s
-
 def mtype_color(mtype):
     # TODO: figure out 🎬 📄 (prints double wide and messes up formatting)
     mtype = mtype.replace('video/', f'🎞️ /')
@@ -115,6 +79,7 @@ def mtype_color(mtype):
     mtype = mtype.replace('text/', '🗎 /')
     mtype = mtype.replace('application/', '🗗 /')
     return mtype
+
 
 def meta(s):
     return Style.RESET_ALL + Style.BRIGHT + Fore.BLACK + s + Style.RESET_ALL
@@ -124,6 +89,10 @@ Dirstat = collections.namedtuple('Dir', ['n_dirs', 'n_files', 's_files'])
 
 @functools.cache
 def dir_stat(p):
+    '''
+    recursively sums up counts for a dir.
+    WARNING: can be very expensive
+    '''
     p = p.resolve()
     n_dirs = 0
     n_files = 0
@@ -159,12 +128,8 @@ def dir_stat(p):
     return Dirstat(n_dirs, n_files, s_files)
 
 
-def tree(path, args, base=None, prefix_str=None, child_prefix_str=None, depth=0):
+def tree(path, args, base=None, prefix_str='', child_prefix_str='', depth=0):
     log.debug('tree(%s, <args>, %s, %r, %r, %s)', path, base, prefix_str, child_prefix_str, depth)
-    if prefix_str is None:
-        prefix_str = ''
-    if child_prefix_str is None:
-        child_prefix_str = ''
 
     p = pathlib.Path(path)
     if base:
@@ -174,18 +139,18 @@ def tree(path, args, base=None, prefix_str=None, child_prefix_str=None, depth=0)
 
     try:
         st = p.stat()
-    except (PermissionError, IOError, OSError) as e:
-        print(
-            prefix_str +
-            Fore.RED + str(current) + Style.RESET_ALL +
-            " : " +
-            Style.BRIGHT + Back.RED + str(e.args[1]) +
-            Style.RESET_ALL, flush=True)
-
-        return
-    log.debug('stat: %s', st)
+    except:
+        st = None
+    # except (PermissionError, IOError, OSError) as e:
+    #     print(
+    #         f'{prefix_str}{Fore.RED}{current}{Style.RESET_ALL}'
+    #         f' : {Style.BRIGHT}{Back.RED}'
+    #         f'{e!r}'
+    #         f'{Style.RESET_ALL}',
+    #         flush=True)
+    #     return
     if p.is_file() and args.no_files:
-        return
+        return -1
 
     # TODO collapse a/b/c
     print(prefix_str + color(p) + str(current) + Style.RESET_ALL, end='')
@@ -207,14 +172,14 @@ def tree(path, args, base=None, prefix_str=None, child_prefix_str=None, depth=0)
                 # TODO: for [socket:234] files, lsof knows how to map to IPs
                 print(f' ⇨ {Style.BRIGHT}{Back.RED}{p.readlink()}{Style.RESET_ALL}')
             else:
-                print(f' ⇨ [0]{Style.BRIGHT}{Back.RED}{e:s}{Style.RESET_ALL}')
+                print(f' ⇨ [0]{Style.BRIGHT}{Back.RED}{e:r}{Style.RESET_ALL}')
 
     elif p.is_file():
         mtype, _encoding = mimetypes.guess_type(str(p))
         if mtype is None:
             mtype = 'unknown'
         sz = os.path.getsize(str(p))
-        child_str = meta(f' [{mtype_color(mtype)}, {hsize(sz):>23}]')
+        child_str = meta(f' [{mtype_color(mtype)}, {pretty.hsize(sz):>23}]')
 
         fg = []
         pad_width = 18
@@ -266,15 +231,24 @@ def tree(path, args, base=None, prefix_str=None, child_prefix_str=None, depth=0)
             n = len(children)
             if n == 0:
                 x = ' ' * (45 + color_chars)
-                child_str = f' [{folder} {x}{hsize(0)}]'
-            elif n == 1: # TODO just print parent as "foo/bar" and don't recurse
-                child_str = f' [{folder}   1    child'
+                child_str = f' [{folder} {x}{pretty.hsize(0)}]'
+            elif n == 1:
+                # just print parent as "foo/bar" and don't recurse
+                print('/', end='')
+                # TODO: print the dir stats from the topmost nonsingle parent, not the leaf
+                return tree(children[0], args,
+                    base=p,
+                    prefix_str='',
+                    child_prefix_str=child_prefix_str,
+                    depth=depth)
+                # child_str = f' [{folder}   1    child'
+
             else:
                 child_str = f' [{folder} {len(children):3d} children'
             if n and args.sums:
                 try:
                     ds = dir_stat(p)
-                    child_str += f', {ds.n_dirs:6d} subdirs, {ds.n_files:6d} files, total size: {hsize(ds.s_files, False):>23s}]'
+                    child_str += f', {ds.n_dirs:6d} subdirs, {ds.n_files:6d} files, total size: {pretty.hsize(ds.s_files, False):>23s}]'
                 except:
                     import traceback
                     traceback.print_exc()
@@ -293,6 +267,7 @@ def tree(path, args, base=None, prefix_str=None, child_prefix_str=None, depth=0)
         except IOError as e:
             print(f' : [1]{Back.RED}{Style.BRIGHT}{e.args[1]:s}{Style.RESET_ALL}', end='')
 
+        lr = 1
         if children and (args.max_depth == -1 or depth <= args.max_depth):
             print(flush=True)
             n = len(children)
@@ -304,109 +279,32 @@ def tree(path, args, base=None, prefix_str=None, child_prefix_str=None, depth=0)
                     h = '├── '
                     c = '│   '
 
-                tree(child, args,
+                lr = tree(child, args,
                     base=p,
                     prefix_str=child_prefix_str + h,
                     child_prefix_str=child_prefix_str + c,
                     depth=depth + 1)
-        # else:
-        #     print()
-        print()
+                if lr == -1:
+                    print()
+                    lr = 1
+        # print(f'>>>[{p} {lr}]<<<',end='')
+        if lr == -1:
+            # no children or last newline was skipped
+            print(flush=True)
 
     else:
+        # what is this file??
+        print(f'UNKNOWN: {p!r}')
         print(flush=True)
 
 
-BIN_AL = list(string.ascii_letters + string.digits)
-@functools.cache
-def bin_style(x):
-    c = chr(x)
-    if not c.isprintable():
-        c = '\uFFFD'
-    if x == 0:
-        r = term.ANSI.COLOR256.GREY + 2
-        return term.ANSI.color_bg256(r) + Fore.BLACK, '\u2400'
-    if x == 255:
-        return Back.RED, c
-    if x == 0x20:
-        bg = term.rgb_from_hsv(80, 1, .5)
-        return term.ANSI.color_bg256(bg), c
-    if 0 < x < 0x20:
-        i = 60 - x * 3
-        fg = term.rgb_from_hsv(i, .8, 1)
-        bg = term.rgb_from_hsv(60, 1, .2)
-        return term.ANSI.color_bg256(bg) + term.ANSI.color_fg256(fg), c
-    if 0x20 < x < 0x30:
-        i = 210 + x * 1.2
-        fg = term.rgb_from_hsv(i, .8, 1)
-        return term.ANSI.color_fg256(fg), c
-    if 0x39 < x < 0x41:
-        i = 260 + x * 1.2
-        fg = term.rgb_from_hsv(i, .8, 1)
-        return term.ANSI.color_fg256(fg), c
-    if 0x5a < x < 0x61:
-        i = 260 + x * 1.2
-        fg = term.rgb_from_hsv(i, .8, 1)
-        return term.ANSI.color_fg256(fg), c
-    if 0x7a < x < 0x7f:
-        i = 260 + x * 1.2
-        fg = term.rgb_from_hsv(i, .8, 1)
-        return term.ANSI.color_fg256(fg), c
-    if 0x7f < x:
-        i = 260 + x * 1.2
-        bg = term.rgb_from_hsv(310, .5, .2)
-        fg = term.rgb_from_hsv(i, .8, 1)
-        return term.ANSI.color_bg256(bg) + term.ANSI.color_fg256(fg), c
-    try:
-        i = BIN_AL.index(c)
-        r = term.rgb_from_hsv(80 + i * 2, 1, 1)
-        return term.ANSI.color_fg256(r), c
-    except ValueError: pass
-    if not c.isprintable():
-        return Style.BRIGHT + Fore.YELLOW, '\uFFFD'
-    return '', c
-
-
-def bin_str(data):
-    s = []
-    for x in data:
-        style, c = bin_style(x)
-        s.append(f'{style}{c}{Style.RESET_ALL}')
-    return ''.join(s)
-
-
-def bin_hex(data, width):
-    s = []
-    last_style = ''
-    for x in data:
-        style, c = bin_style(x)
-        p = ' '
-        if last_style != style:
-            last_style = style
-            p = f'{Style.RESET_ALL} {style}'
-        s.append(f'{p}{x:02x}')
-    s.append(Style.RESET_ALL)
-    s.extend(['   '] * (width - len(s) + 1))
-    return ''.join(s)
-
-
-def xxd(data, width):
-    log.debug('width: %d', width)
-    if width < 0:
-        width = 32
-    for i in range(0, len(data), width):
-        span = data[i:i + width]
-        line = ' {} {}│{} {}{}\n'.format(
-            bin_hex(span, width),
-            Style.RESET_ALL + Fore.YELLOW,
-            Style.RESET_ALL,
-            bin_str(span),
-            Style.RESET_ALL,
-        )
-        yield i, line
-
 
 def is_text(data):
+    '''
+    decide if some bytes are "text" or not.
+    if they are, return them as a unicode string.
+    if not, return None
+    '''
     try:
         text = data.decode('utf8')
     except ValueError as e:
@@ -434,62 +332,6 @@ def is_text(data):
     return text
 
 
-def syntax_int(text):
-    if len(text) > 30:
-        return
-    try:
-        i = int(text)
-    except ValueError:
-        return
-    l = len(text)
-
-    prefix, digits, suffix = re.match(r'^(\D*)(\d+)(\s*)$', text).groups()
-    res = [suffix, Style.RESET_ALL]
-    for i in range(len(digits), 0, -3):
-        fg = term.rgb_from_hsv(i * 30, .2, 1)
-        res.append(text[i-3:i])
-        res.append(term.ANSI.color_fg256(fg))
-
-    res.append(prefix)
-    res.append(Fore.YELLOW)
-    return ''.join(reversed(res))
-
-
-def syntax_highlight(p, text):
-    # TODO: if file is a single integer, color by 000's
-    if int_text := syntax_int(text):
-        return int_text
-    try:
-        import pygments
-        import pygments.lexers
-        import pygments.formatters
-        import pygments.styles
-    except ImportError:
-        return text
-    try:
-        mtype, _encoding = mimetypes.guess_type(str(p))
-        lexer1, lexer2, lexer3 = None, None, None
-        try:   lexer1 = pygments.lexers.get_lexer_for_mimetype(mtype)
-        except pygments.util.ClassNotFound: pass
-        try:   lexer2 = pygments.lexers.get_lexer_for_filename(str(p))
-        except pygments.util.ClassNotFound: pass
-        try:   lexer3 = pygments.lexers.guess_lexer(text)
-        except pygments.util.ClassNotFound: pass
-        lexer = lexer1 or lexer2 or lexer3
-        if not lexer:
-            return text
-        style = pygments.styles.get_style_by_name('solarized-dark')
-        text = pygments.highlight(
-            text,
-            (lexer1 or lexer2 or lexer3),
-            # TODO this does not work on u14-screen-mobaxterm
-            # pygments.formatters.TerminalTrueColorFormatter(style=style))
-            pygments.formatters.Terminal256Formatter(style=style))
-    except Exception as e:
-        print(e, file=sys.stderr)
-    return text
-
-
 def file(p, args, child_prefix_str, st):
     log.debug('file(%s, <args>, %r, <st>)', p, child_prefix_str)
     lines = None
@@ -513,12 +355,12 @@ def file(p, args, child_prefix_str, st):
     if (not args.as_binary) and (text := is_text(data)):
         is_bin = False
         orig_text = text
-        text = syntax_highlight(p, text)
+        text = pretty.syntax_highlight(p, text)
         lines = text.splitlines(True)
 
     else:
         is_bin = True
-        lines = list(xxd(data, (args.max_line_width - len(child_prefix_str) - 16) // 4))
+        lines = list(pretty.xxd(data, (args.max_line_width - len(child_prefix_str) - 16) // 4))
 
     log.debug(f'is_bin={is_bin}, len(lines)={len(lines)}')
     if len(lines) == 0:
@@ -531,9 +373,9 @@ def file(p, args, child_prefix_str, st):
             i, line = line
             yield ''.join((
                 ' 🡺  ',
-                bin_hex(data, 0), Style.RESET_ALL,
+                pretty.bin_hex(data, 0), Style.RESET_ALL,
                 Fore.YELLOW, ' │ ', Style.RESET_ALL,
-                bin_str(data),
+                pretty.bin_str(data),
             ))
             return
         lw = len(child_prefix_str + line)
@@ -542,8 +384,8 @@ def file(p, args, child_prefix_str, st):
             line = line[:args.max_line_width]
             line = line + meta(' [{:d} chars]'.format(l))
             # TODO leave \r\n at the end (??)
-        # TODO split this out to a function, and add colors
-        line = line \
+            # TODO split this out to a function, and add colors
+            line = line \
                 .replace('\r', ' ␍')\
                 .replace('\n', ' ␊')\
                 .replace('\t', ' → ')\

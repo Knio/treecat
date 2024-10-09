@@ -68,7 +68,7 @@ def t_unicode():
   print('** Unicode support ' + '*' * 40)
   print()
 
-  print('''Unicode 15.0 (Unreleased):
+  print('''Unicode 15.1 (2023-09-12):
       🫨 🩵 🩶 🩷 🫸 🫷 🫎 🫏 🪽 🪿 🪼 🫚 🪻 🫛 🪭 🪮 🪇 🪈 🪯 🛜''')
   print('''Unicode 14.0 (2021-09-14):
       🫢 🫣 🫡 🫥 🫤 🥹 🫱 🫲 🫳 🫴 🫰 🫵 🫶 🫦 🫅 🫃 🫄 🧌 🪸 🪷 🪹
@@ -210,9 +210,10 @@ assert rgb_from_hsv(0, 0, 0) == (0, 0, 0)
 assert rgb_from_hsv(0, 0, 1) == (1, 1, 1)
 assert rgb_from_hsv(60, 1, .75) == (.75, .75, 0)
 
-class ANSI:
-    # https://en.wikipedia.org/wiki/ANSI_escape_code#Description
 
+# https://en.wikipedia.org/wiki/ANSI_escape_code#Description
+# https://gist.github.com/ConnerWill/d4b6c776b509add763e17f9f113fd25b
+class ANSI:
   ESC = '\x1b'    # also known as '\033',  '\e',  '^['
   CSI = '['       # control sequence introducer
   OSC = ']'       # operating system command
@@ -254,6 +255,7 @@ class ANSI:
     MAGENTA = 5
     CYAN    = 6
     WHITE   = 7
+    DEFAULT = 9
 
   class COLOR256(IntEnum):
     BLACK   = 16
