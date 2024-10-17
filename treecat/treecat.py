@@ -186,6 +186,7 @@ def tree(path, args, base=None, prefix_str='', child_prefix_str='', depth=0):
         if (not args.summary) and printable(mtype):
             fg = list(file(p, args, child_prefix_str, st))
         inline = len(fg) == 1
+        inline = False # it's broken
         if inline:
             # TODO: break out if it doesn't fit in max_line_width
             l = fg.pop()
@@ -222,7 +223,7 @@ def tree(path, args, base=None, prefix_str='', child_prefix_str='', depth=0):
         # if fg:
         #     print()
         for line in fg:
-            print(line, end='')
+            print(line)
 
     elif p.is_dir():
         children = None
@@ -262,14 +263,14 @@ def tree(path, args, base=None, prefix_str='', child_prefix_str='', depth=0):
             # right justify
             pad = args.max_line_width - len(prefix_str) - len(str(current)) - len(child_str) + color_chars
             print(' ' * pad, end='')
-            print(meta(child_str), end='', flush=True)
+            print(meta(child_str))
 
         except IOError as e:
             print(f' : [1]{Back.RED}{Style.BRIGHT}{e.args[1]:s}{Style.RESET_ALL}', end='')
 
         lr = 1
         if children and (args.max_depth == -1 or depth <= args.max_depth):
-            print(flush=True)
+            # print(flush=True)
             n = len(children)
             for i, child in enumerate(children):
                 if i == n - 1:
@@ -287,10 +288,10 @@ def tree(path, args, base=None, prefix_str='', child_prefix_str='', depth=0):
                 if lr == -1:
                     print()
                     lr = 1
-        # print(f'>>>[{p} {lr}]<<<',end='')
-        if lr == -1:
-            # no children or last newline was skipped
-            print(flush=True)
+        # # print(f'>>>[{p} {lr}]<<<',end='')
+        # if lr == -1:
+        #     # no children or last newline was skipped
+        #     print(flush=True)
 
     else:
         # what is this file??
@@ -349,7 +350,7 @@ def file(p, args, child_prefix_str, st):
             msg = 'Read Timeout'
         else:
             msg = str(e.args[1])
-        yield (f' 🡺  [2]{Back.RED}{Style.BRIGHT}{msg}{Style.RESET_ALL}')
+        yield f' 🡺  [2]{Back.RED}{Style.BRIGHT}{msg}{Style.RESET_ALL}'
         return
 
     if (not args.as_binary) and (text := is_text(data)):
@@ -364,10 +365,10 @@ def file(p, args, child_prefix_str, st):
 
     log.debug(f'is_bin={is_bin}, len(lines)={len(lines)}')
     if len(lines) == 0:
-        yield (' 🡺  ' + '⬔' + Style.RESET_ALL)
+        yield f' 🡺  ⬔{Style.RESET_ALL}'
         return
 
-    if len(lines) == 1:
+    if False and len(lines) == 1: # broken
         line = lines[0]
         if is_bin:
             i, line = line
@@ -397,7 +398,6 @@ def file(p, args, child_prefix_str, st):
     # many lines
     read_lines = len(lines)
     skipped = 0
-    # print(flush=True)
     if args.max_lines:
         skipped = read_lines - args.max_lines
         lines = lines[:args.max_lines]
@@ -418,7 +418,11 @@ def file(p, args, child_prefix_str, st):
             line = line[:args.max_line_width]
             while line[-1] in '\r\n':
                 line = line[:-1]
-            line = line + meta(f' [{l:d} chars]') + '\r\n'
+            line = line + meta(f' [{l:d} chars]')
+
+        # TODO do this better
+        while line and line[-1] in '\r\n':
+            line = line[:-1]
 
         print_str = child_prefix_str + Fore.YELLOW + f'{(i + 1):{digs}d}│ ' + Fore.WHITE + line + Style.RESET_ALL
         yield print_str
@@ -426,12 +430,7 @@ def file(p, args, child_prefix_str, st):
     if st:
         skipped_bytes = st.st_size - len(data)
         log.debug(f'skipped_bytes: {skipped_bytes}, skipped: {skipped}')
-        if skipped_bytes:
+        if skipped_bytes > 0:
             yield child_prefix_str + meta(f'... [{st.st_size:d} bytes total]\n')
     elif skipped:
         yield child_prefix_str + meta(f'... [{read_lines} lines total]\n')
-    # elif '\n' not in line[-2:]:
-    #     print()
-    # print(end='', flush=True)
-    yield ''
-    # sys.stdout.buffer.flush()
