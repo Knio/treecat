@@ -83,12 +83,12 @@ def main():
         def read_bytes(self):
           return sys.stdin.read().encode('utf8')
 
-      lines = treecat.file(fp(), child_prefix_str='', st=None, args=args)
+      lines = treecat.format_file(fp(), child_prefix_str='', st=None, args=args)
 
     if args.file:
       f = pathlib.Path(args.file)
       st = f.stat()
-      lines = treecat.file(f, child_prefix_str='', st=st, args=args)
+      lines = treecat.format_file(f, child_prefix_str='', st=st, args=args)
 
     if lines:
       for line in lines:

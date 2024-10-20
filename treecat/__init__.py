@@ -3,4 +3,4 @@
 from ._version import *
 
 from .main import main
-from .treecat import tree, file
+from .treecat import tree, format_file

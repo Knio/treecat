@@ -85,6 +85,21 @@ def meta(s):
     return Style.RESET_ALL + Style.BRIGHT + Fore.BLACK + s + Style.RESET_ALL
 
 
+debug_padding = 1
+def nl(n):
+    s = '\n' \
+        f'{term.ANSI.color_bg8(term.ANSI.COLOR8.RED)}' \
+        f'{term.ANSI.color_fg8(term.ANSI.COLOR8.BLACK)}' \
+        f'{n}' \
+        f'{term.ANSI.graphics_reset()}'
+    print(s, end='')
+
+
+debug_padding = 0
+def nl(n):
+    print()
+
+
 Dirstat = collections.namedtuple('Dir', ['n_dirs', 'n_files', 's_files'])
 
 @functools.cache
@@ -128,7 +143,150 @@ def dir_stat(p):
     return Dirstat(n_dirs, n_files, s_files)
 
 
+def tree_file(p, current, args, base=None, prefix_str='', child_prefix_str='', depth=0):
+    color_chars = 14
+
+    try:
+        st = p.stat()
+    except:
+        st = None
+
+    mtype, _encoding = mimetypes.guess_type(str(p))
+    if mtype is None:
+        mtype = 'unknown'
+    sz = os.path.getsize(str(p))
+    child_str = meta(f' [{mtype_color(mtype)}, {pretty.hsize(sz):>23}]')
+
+    fg = []
+    pad_width = 18
+    if (not args.summary) and printable(mtype):
+        fg = list(format_file(p, args, child_prefix_str, st))
+    inline = len(fg) == 1
+    inline = False # it's broken
+    if inline:
+        # TODO: break out if it doesn't fit in max_line_width
+        l = fg.pop()
+        lw = get_string_width(l)
+        log.debug('single line file: %r', l)
+        log.debug('        stripped: %r', term.ANSI.strip(l))
+        pw = args.max_line_width - len(prefix_str) - len(str(current)) - len(child_str) - debug_padding
+        # l = 'X' * aw
+        pad_width -= max(lw, pw)
+        pp = pw - lw
+        log.debug(
+            'prefix_str: %d '
+            'name: %d '
+            'line: %d '
+            'line stripped: %d '
+            'pre-line padding: %s',
+            len(prefix_str),
+            len(str(current)),
+            len(l),
+            lw,
+            pp
+        )
+        # TODO: this doesn't look right
+        print(' ' * pp, end='')
+        print(l, end='')
+
+    pad = args.max_line_width - len(prefix_str) - len(str(current)) - len(child_str) + color_chars + pad_width - debug_padding
+    log.debug('pad: %s', pad)
+    pad_s = pad * '┈'
+    # pad_s = pad * ' '
+    print(term.ANSI.graphics(term.ANSI.GRAPHICS.DIM) + pad_s + term.ANSI.graphics_reset(), end='')
+    print(meta(child_str), end='')
+    print()
+    # if fg:
+    #     print()
+    for line in fg:
+        print(line)
+    # nl(1)
+
+
+def tree_dir(p, current, args, base=None, prefix_str='', child_prefix_str='', depth=0):
+    color_chars = 14
+    folder = '📂'
+    # folder = '🗁 '
+
+    children = None
+    try:
+        children = sorted(p.iterdir())
+        n = len(children)
+        if n == 0:
+            x = ' ' * (45 + color_chars)
+            child_str = f' [{folder} {x}{pretty.hsize(0)}]'
+        elif n == 1 and children[0].is_dir():
+            # just print parent as "foo/bar" and don't recurse
+            # TODO: print the dir stats from the topmost nonsingle parent, not the leaf
+            c = children[0]
+            cc = c.relative_to(p)
+            print('/', end='')
+            print(color(p) + str(cc) + Style.RESET_ALL, end='')
+
+            tree_dir(c, cc, args,
+                base=p,
+                prefix_str=prefix_str + str(current) + '/',
+                child_prefix_str=child_prefix_str,
+                depth=depth)
+            # nl(4)
+            return
+            # child_str = f' [{folder}   1    child'
+
+        else:
+            child_str = f' [{folder} {len(children):3d} children'
+        if n and args.sums:
+            try:
+                ds = dir_stat(p)
+                child_str += f', {ds.n_dirs:6d} subdirs, {ds.n_files:6d} files, total size: {pretty.hsize(ds.s_files, False):>23s}]'
+            except:
+                import traceback
+                traceback.print_exc()
+                # ??
+        elif n:
+            # child_str += ' ' * (45 + color_chars - 1)
+            child_str += ']'
+            color_chars -= 15
+
+
+        # right justify
+        pad = args.max_line_width - len(prefix_str) - len(str(current)) - len(child_str) + color_chars - debug_padding
+        print(' ' * pad, end='')
+        print(meta(child_str), end='')
+        nl(2)
+
+    except IOError as e:
+        print(f' : [1]{Back.RED}{Style.BRIGHT}{e.args[1]:s}{Style.RESET_ALL}', end='')
+
+    lr = 1
+    if children and (args.max_depth == -1 or depth <= args.max_depth):
+        # print(flush=True)
+        n = len(children)
+        for i, child in enumerate(children):
+            if i == n - 1:
+                h = '└── '
+                c = '    '
+            else:
+                h = '├── '
+                c = '│   '
+
+            lr = tree(child, args,
+                base=p,
+                prefix_str=child_prefix_str + h,
+                child_prefix_str=child_prefix_str + c,
+                depth=depth + 1)
+            if lr == -1:
+                # nl(3)
+                lr = 1
+    # # print(f'>>>[{p} {lr}]<<<',end='')
+    # if lr == -1:
+    #     # no children or last newline was skipped
+    #     print(flush=True)
+
+
 def tree(path, args, base=None, prefix_str='', child_prefix_str='', depth=0):
+    '''
+    assume we are on a fresh new line
+    '''
     log.debug('tree(%s, <args>, %s, %r, %r, %s)', path, base, prefix_str, child_prefix_str, depth)
 
     p = pathlib.Path(path)
@@ -137,29 +295,14 @@ def tree(path, args, base=None, prefix_str='', child_prefix_str='', depth=0):
     else:
         current = p
 
-    try:
-        st = p.stat()
-    except:
-        st = None
-    # except (PermissionError, IOError, OSError) as e:
-    #     print(
-    #         f'{prefix_str}{Fore.RED}{current}{Style.RESET_ALL}'
-    #         f' : {Style.BRIGHT}{Back.RED}'
-    #         f'{e!r}'
-    #         f'{Style.RESET_ALL}',
-    #         flush=True)
-    #     return
     if p.is_file() and args.no_files:
         return -1
 
-    # TODO collapse a/b/c
+    # own name
     print(prefix_str + color(p) + str(current) + Style.RESET_ALL, end='')
 
-    color_chars = 14
-    folder = '📂'
-    # folder = '🗁 '
-
     if base and p.is_symlink():
+        # TODO print metadata ie [symlink] right justified
         try:
             p2 = p.resolve(strict=True)
             try:
@@ -170,128 +313,16 @@ def tree(path, args, base=None, prefix_str='', child_prefix_str='', depth=0):
         except IOError as e:
             if e.errno == 2:
                 # TODO: for [socket:234] files, lsof knows how to map to IPs
+                # TODO for fdinfo files, ../<fd> mnt_id --> /proc/<pid>/mountinfo
                 print(f' ⇨ {Style.BRIGHT}{Back.RED}{p.readlink()}{Style.RESET_ALL}')
             else:
                 print(f' ⇨ [0]{Style.BRIGHT}{Back.RED}{e:r}{Style.RESET_ALL}')
 
     elif p.is_file():
-        mtype, _encoding = mimetypes.guess_type(str(p))
-        if mtype is None:
-            mtype = 'unknown'
-        sz = os.path.getsize(str(p))
-        child_str = meta(f' [{mtype_color(mtype)}, {pretty.hsize(sz):>23}]')
-
-        fg = []
-        pad_width = 18
-        if (not args.summary) and printable(mtype):
-            fg = list(file(p, args, child_prefix_str, st))
-        inline = len(fg) == 1
-        inline = False # it's broken
-        if inline:
-            # TODO: break out if it doesn't fit in max_line_width
-            l = fg.pop()
-            lw = get_string_width(l)
-            log.debug('single line file: %r', l)
-            log.debug('        stripped: %r', term.ANSI.strip(l))
-            pw = args.max_line_width - len(prefix_str) - len(str(current)) - len(child_str)
-            # l = 'X' * aw
-            pad_width -= max(lw, pw)
-            pp = pw - lw
-            log.debug(
-                'prefix_str: %d '
-                'name: %d '
-                'line: %d '
-                'line stripped: %d '
-                'pre-line padding: %s',
-                len(prefix_str),
-                len(str(current)),
-                len(l),
-                lw,
-                pp
-            )
-            # TODO: this doesn't look right
-            print(' ' * pp, end='')
-            print(l, end='')
-
-        pad = args.max_line_width - len(prefix_str) - len(str(current)) - len(child_str) + color_chars + pad_width
-        log.debug('pad: %s', pad)
-        pad_s = pad * '┈'
-        pad_s = pad * ' '
-        print(term.ANSI.graphics(term.ANSI.GRAPHICS.DIM) + pad_s + term.ANSI.graphics_reset(), end='')
-        print(meta(child_str), end='')
-        print()
-        # if fg:
-        #     print()
-        for line in fg:
-            print(line)
+        tree_file(p, current, args, base, prefix_str, child_prefix_str, depth)
 
     elif p.is_dir():
-        children = None
-        try:
-            children = sorted(p.iterdir())
-            n = len(children)
-            if n == 0:
-                x = ' ' * (45 + color_chars)
-                child_str = f' [{folder} {x}{pretty.hsize(0)}]'
-            elif n == 1:
-                # just print parent as "foo/bar" and don't recurse
-                print('/', end='')
-                # TODO: print the dir stats from the topmost nonsingle parent, not the leaf
-                return tree(children[0], args,
-                    base=p,
-                    prefix_str='',
-                    child_prefix_str=child_prefix_str,
-                    depth=depth)
-                # child_str = f' [{folder}   1    child'
-
-            else:
-                child_str = f' [{folder} {len(children):3d} children'
-            if n and args.sums:
-                try:
-                    ds = dir_stat(p)
-                    child_str += f', {ds.n_dirs:6d} subdirs, {ds.n_files:6d} files, total size: {pretty.hsize(ds.s_files, False):>23s}]'
-                except:
-                    import traceback
-                    traceback.print_exc()
-                    # ??
-            elif n:
-                # child_str += ' ' * (45 + color_chars - 1)
-                child_str += ']'
-                color_chars -= 15
-
-
-            # right justify
-            pad = args.max_line_width - len(prefix_str) - len(str(current)) - len(child_str) + color_chars
-            print(' ' * pad, end='')
-            print(meta(child_str))
-
-        except IOError as e:
-            print(f' : [1]{Back.RED}{Style.BRIGHT}{e.args[1]:s}{Style.RESET_ALL}', end='')
-
-        lr = 1
-        if children and (args.max_depth == -1 or depth <= args.max_depth):
-            # print(flush=True)
-            n = len(children)
-            for i, child in enumerate(children):
-                if i == n - 1:
-                    h = '└── '
-                    c = '    '
-                else:
-                    h = '├── '
-                    c = '│   '
-
-                lr = tree(child, args,
-                    base=p,
-                    prefix_str=child_prefix_str + h,
-                    child_prefix_str=child_prefix_str + c,
-                    depth=depth + 1)
-                if lr == -1:
-                    print()
-                    lr = 1
-        # # print(f'>>>[{p} {lr}]<<<',end='')
-        # if lr == -1:
-        #     # no children or last newline was skipped
-        #     print(flush=True)
+        tree_dir(p, current, args, base, prefix_str, child_prefix_str, depth)
 
     else:
         # what is this file??
@@ -333,7 +364,7 @@ def is_text(data):
     return text
 
 
-def file(p, args, child_prefix_str, st):
+def format_file(p, args, child_prefix_str, st):
     log.debug('file(%s, <args>, %r, <st>)', p, child_prefix_str)
     lines = None
     try:
@@ -361,11 +392,13 @@ def file(p, args, child_prefix_str, st):
 
     else:
         is_bin = True
-        lines = list(pretty.xxd(data, (args.max_line_width - len(child_prefix_str) - 16) // 4))
+        bytes = (args.max_line_width - len(child_prefix_str) - 16) // 4
+        bytes = 4 * (bytes // 4)
+        lines = list(pretty.xxd(data, bytes))
 
     log.debug(f'is_bin={is_bin}, len(lines)={len(lines)}')
     if len(lines) == 0:
-        yield f' 🡺  ⬔{Style.RESET_ALL}'
+        yield f'{child_prefix_str} 🡺  ⬔{Style.RESET_ALL}'
         return
 
     if False and len(lines) == 1: # broken

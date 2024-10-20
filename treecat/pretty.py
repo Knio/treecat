@@ -129,7 +129,7 @@ def xxd(data, width):
         width = 32
     for i in range(0, len(data), width):
         span = data[i:i + width]
-        line = ' {} {}│{} {}{}\n'.format(
+        line = ' {} {}│{} {}{}'.format(
             bin_hex(span, width),
             RESET + Fore.YELLOW,
             RESET,
