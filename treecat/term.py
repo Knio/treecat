@@ -436,6 +436,32 @@ def t_colors():
     print()
 
 
+def t_color256():
+  print('** 256 Colors ' + '*' * 40)
+  colorama.init()
+  FW = ANSI.color_fg256(255)
+  BW = ANSI.color_bg256(255)
+  FB = ANSI.color_fg256(0)
+  BB = ANSI.color_bg256(0)
+  RS = ANSI.graphics_reset()
+  N = 6
+  for i in range(N):
+    for j in range(N):
+      for k in range(N):
+        c = 16
+        c += i * N**2
+        c += k * N**1
+        c += j * N**0
+        print((
+          f'{BB}{ANSI.color_fg256(c)} {c:3d}{RS}'
+          f'{FW}{ANSI.color_bg256(c)} {c:=3d} {RS}'
+          f'{BW}{ANSI.color_fg256(c)} {c:<3d} {RS}  '
+          ), end='')
+      # if (j % 2) == 1:
+      print()
+
+
+
 def t_mouse():
     # https://invisible-island.net/xterm/ctlseqs/ctlseqs.html#h2-Mouse-Tracking
 
