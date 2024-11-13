@@ -367,21 +367,25 @@ def is_text(data):
 def format_file(p, args, child_prefix_str, st):
     log.debug('file(%s, <args>, %r, <st>)', p, child_prefix_str)
     lines = None
+    eof = None
     try:
         max_bytes = 0
         signal_alarm(1) # 1s timeout on reads
         if args.max_line_width and args.max_lines:
             max_bytes = args.max_lines * args.max_line_width
             data = p.open('rb').read(max_bytes)
+            eof = len(data) < max_bytes
         else:
+            # TODO better handling of large files
             data = p.read_bytes()
+            eof = True
         signal_alarm(0)
     except (TimeoutError, IOError) as e:
         if isinstance(e, TimeoutError):
             msg = 'Read Timeout'
         else:
             msg = str(e.args[1])
-        yield f' 🡺  [2]{Back.RED}{Style.BRIGHT}{msg}{Style.RESET_ALL}'
+        yield f'{child_prefix_str} 🡺  [2]{Back.RED}{Style.BRIGHT}{msg}{Style.RESET_ALL}'
         return
 
     if (not args.as_binary) and (text := is_text(data)):
@@ -463,7 +467,7 @@ def format_file(p, args, child_prefix_str, st):
     if st:
         skipped_bytes = st.st_size - len(data)
         log.debug(f'skipped_bytes: {skipped_bytes}, skipped: {skipped}')
-        if skipped_bytes > 0:
+        if (not eof) and (skipped_bytes > 0):
             yield child_prefix_str + meta(f'... [{st.st_size:d} bytes total]\n')
     elif skipped:
         yield child_prefix_str + meta(f'... [{read_lines} lines total]\n')

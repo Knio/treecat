@@ -4,7 +4,7 @@ import functools
 import string
 import sys
 import mimetypes
-
+import re
 
 # TODO use own term
 from colorama import Fore, Back, Style

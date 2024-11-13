@@ -439,27 +439,41 @@ def t_colors():
 def t_color256():
   print('** 256 Colors ' + '*' * 40)
   colorama.init()
-  FW = ANSI.color_fg256(255)
-  BW = ANSI.color_bg256(255)
-  FB = ANSI.color_fg256(0)
-  BB = ANSI.color_bg256(0)
+  FW = ANSI.color_fg8(ANSI.COLOR8.WHITE)
+  BW = ANSI.color_bg8(ANSI.COLOR8.WHITE)
+  FB = ANSI.color_fg8(ANSI.COLOR8.BLACK)
+  BB = ANSI.color_bg8(ANSI.COLOR8.BLACK)
   RS = ANSI.graphics_reset()
+  print(RS, end='')
+
+  for c in range(16):
+    print((
+      f'{FB}{ANSI.color_bg256(c)} {c:=2d} {RS}  '
+      ), end='')
+  print()
+  for c in range(16):
+    print((
+      f'{FW}{ANSI.color_bg256(c)} {c:=2d} {RS}  '
+      ), end='')
+  print()
+
+
   N = 6
   for i in range(N):
     for j in range(N):
-      for k in range(N):
+      for k in range(N + 1):
         c = 16
-        c += i * N**2
-        c += k * N**1
         c += j * N**0
+        c += i * N**1
+        c += k * N**2
+        if c > 255:
+          continue
         print((
-          f'{BB}{ANSI.color_fg256(c)} {c:3d}{RS}'
+          f'{BB}{ANSI.color_fg256(c)} {c:3d} {RS}'
           f'{FW}{ANSI.color_bg256(c)} {c:=3d} {RS}'
           f'{BW}{ANSI.color_fg256(c)} {c:<3d} {RS}  '
           ), end='')
-      # if (j % 2) == 1:
       print()
-
 
 
 def t_mouse():
