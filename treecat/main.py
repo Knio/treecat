@@ -92,7 +92,7 @@ def main():
 
     if lines:
       for line in lines:
-        print(line, end='', flush=False)
+        print(line, flush=False)
       print(end='', flush=True)
       return
 
