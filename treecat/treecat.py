@@ -397,6 +397,7 @@ def format_file(p, args, child_prefix_str, st):
     else:
         is_bin = True
         bytes = (args.max_line_width - len(child_prefix_str) - 16) // 4
+        bytes = args.max_line_width
         bytes = 4 * (bytes // 4)
         lines = list(pretty.xxd(data, bytes))
 
@@ -468,6 +469,6 @@ def format_file(p, args, child_prefix_str, st):
         skipped_bytes = st.st_size - len(data)
         log.debug(f'skipped_bytes: {skipped_bytes}, skipped: {skipped}')
         if (not eof) and (skipped_bytes > 0):
-            yield child_prefix_str + meta(f'... [{st.st_size:d} bytes total]\n')
+            yield child_prefix_str + meta(f'... [{st.st_size:,d} bytes total]\n')
     elif skipped:
-        yield child_prefix_str + meta(f'... [{read_lines} lines total]\n')
+        yield child_prefix_str + meta(f'... [{read_lines:,d} lines total]\n')
