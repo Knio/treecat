@@ -62,7 +62,6 @@ def main():
     log.debug('Debug logging enabled')
     log.debug(args)
 
-
   # TODO add bool here for if user-set or not, so we can still use term size
   # for displaying metadata, but not crop long lines
   if args.max_line_width == -1: # -1 = auto, 0 = no limit

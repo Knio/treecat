@@ -63,6 +63,8 @@ def printable(mtype):
     # TODO make this take args
     bad = set([
         # 'application/pdf',
+        'block device',
+        'char device',
     ])
     if mtype in bad:
         return False
@@ -154,6 +156,10 @@ def tree_file(p, current, args, base=None, prefix_str='', child_prefix_str='', d
     mtype, _encoding = mimetypes.guess_type(str(p))
     if mtype is None:
         mtype = 'unknown'
+        if p.is_block_device():
+            mtype = 'block device'
+        elif p.is_char_device():
+            mtype = 'char device'
     sz = os.path.getsize(str(p))
     child_str = meta(f' [{mtype_color(mtype)}, {pretty.hsize(sz):>23}]')
 
@@ -314,11 +320,12 @@ def tree(path, args, base=None, prefix_str='', child_prefix_str='', depth=0):
             if e.errno == 2:
                 # TODO: for [socket:234] files, lsof knows how to map to IPs
                 # TODO for fdinfo files, ../<fd> mnt_id --> /proc/<pid>/mountinfo
-                print(f' ⇨ {Style.BRIGHT}{Back.RED}{p.readlink()}{Style.RESET_ALL}')
+                print(f' ⇨  {Style.BRIGHT}{Back.RED}{p.readlink()}{Style.RESET_ALL}')
+                # TODO: padding and print mimetype as "symlink"
             else:
-                print(f' ⇨ [0]{Style.BRIGHT}{Back.RED}{e:r}{Style.RESET_ALL}')
+                print(f' ⇨  [0]{Style.BRIGHT}{Back.RED}{e:r}{Style.RESET_ALL}')
 
-    elif p.is_file():
+    elif (p.is_file() or p.is_char_device() or p.is_block_device()):
         tree_file(p, current, args, base, prefix_str, child_prefix_str, depth)
 
     elif p.is_dir():
@@ -326,7 +333,7 @@ def tree(path, args, base=None, prefix_str='', child_prefix_str='', depth=0):
 
     else:
         # what is this file??
-        print(f'UNKNOWN: {p!r}')
+        print(f'UNKNOWN PATH: {p!r}', end='')
         print(flush=True)
 
 
@@ -396,8 +403,7 @@ def format_file(p, args, child_prefix_str, st):
 
     else:
         is_bin = True
-        bytes = (args.max_line_width - len(child_prefix_str) - 16) // 4
-        bytes = args.max_line_width
+        bytes = (args.max_line_width - 16) // 4
         bytes = 4 * (bytes // 4)
         lines = list(pretty.xxd(data, bytes))
 
