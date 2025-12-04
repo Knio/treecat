@@ -342,6 +342,10 @@ class ANSI:
 
 
 assert ANSI.strip('x') == 'x'
+__strip_test = ANSI.color_bg8(ANSI.COLOR8.CYAN)
+assert ANSI.strip(__strip_test) == ''
+#assert ANSI.strip(__strip_test[:-1]) == ''
+
 
 def t_colors():
   print('** Color support ' + '*' * 40)

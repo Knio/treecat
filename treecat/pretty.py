@@ -1,6 +1,8 @@
 # coding=utf8
 
 import functools
+import logging
+import math
 import string
 import sys
 import mimetypes
@@ -11,6 +13,8 @@ from colorama import Fore, Back, Style
 
 
 from . import term
+
+log = logging.getLogger('pretty')
 
 
 RESET = term.ANSI.graphics_reset()
@@ -152,10 +156,13 @@ def syntax_int(text):
     l = len(text)
 
     prefix, digits, suffix = re.match(r'^(\D*)(\d+)(\s*)$', text).groups()
+    # log.debug(f'prefix: {prefix!r}, digits: {digits!r}, suffix: {suffix!r}')
     res = [suffix, RESET]
     for i in range(len(digits), 0, -3):
         fg = term.rgb_from_hsv(i * 30, .2, 1)
-        res.append(text[i-3:i])
+        s = max(i-3,0)
+        # log.debug(f'digitset: [{s},{i}] {text[s:i]!r}')
+        res.append(text[s:i])
         res.append(term.ANSI.color_fg256(fg))
 
     res.append(prefix)
@@ -164,7 +171,6 @@ def syntax_int(text):
 
 
 def syntax_highlight(p, text):
-    # TODO: if file is a single integer, color by 000's
     if int_text := syntax_int(text):
         return int_text
     try:

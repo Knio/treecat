@@ -61,11 +61,11 @@ def color(p):
 
 def printable(mtype):
     # TODO make this take args
-    bad = set([
+    bad = {
         # 'application/pdf',
         'block device',
         'char device',
-    ])
+    }
     if mtype in bad:
         return False
     # if mtype.startswith('image'): return False
@@ -386,6 +386,7 @@ def format_file(p, args, child_prefix_str, st, line_numbers=True):
 
     if (not args.as_binary) and (text := is_text(data)):
         is_bin = False
+        log.debug(f'text: {text!r}')
         text = pretty.syntax_highlight(p, text)
         text = text.replace('\0', '␀')
         lines = text.splitlines(True)
@@ -411,6 +412,7 @@ def format_file(p, args, child_prefix_str, st, line_numbers=True):
     else:
         digs = len(str(len(lines)))
     for i, line in enumerate(lines):
+        log.debug(f'line[{i}]: {line!r}')
         if is_bin:
             i, line = line
             if line_numbers:
@@ -433,17 +435,27 @@ def format_file(p, args, child_prefix_str, st, line_numbers=True):
 
         if args.max_line_width:
             lw = get_string_width(line)
-            back = meta(f'…[{lw:d} chars]') + Style.RESET_ALL
-            ex = get_string_width(child_prefix_str + front + back)
-            x = args.max_line_width - ex
-            if x < lw:
-                # not accurate, but conservative, if there's color codes
-                line = line[:x]
+            ex = get_string_width(child_prefix_str + front)
+            if (lw + ex) > args.max_line_width:
+                back = meta(f'…[{lw:d} chars ({lw}>{args.max_line_width})]') + Style.RESET_ALL
+                ex += get_string_width(back)
+                e = len(line)
+                s = args.max_line_width - ex
+                t = s
+                while (s < e):
+                    m = (s + e) // 2
+                    new_line = line[:m]
+                    if get_string_width(new_line) > t:
+                        e = m
+                    else:
+                        s = m + 1
+
+                line = new_line
             else:
                 back = ''
         else:
             back = ''
-
+        log.debug(repr(line))
         print_str = front + Fore.WHITE + line + Style.RESET_ALL + back
         yield print_str
 
